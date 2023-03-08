@@ -91,3 +91,35 @@ echo 'killall -9 cloudflared' >> /etc/services.d/pihole-dot-doh/finish
 # Make bash scripts executable
 chmod -v +x /etc/services.d/pihole-dot-doh/run
 chmod -v +x /etc/services.d/pihole-dot-doh/finish
+
+### Lancache cache domains code below
+# Grabbing the repo
+cd ~
+git clone https://github.com/uklans/cache-domains.git
+
+# Making copies of the files
+mkdir /tmp/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmasq.sh /tmp/cache-domains/scripts/
+mkdir /tmp/cache-domains/ && cp `find ~/cache-domains -name *.txt -o -name cache_domains.json` /tmp/cache-domains
+mkdir /tmp/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmasq.sh /tmp/cache-domains/scripts/
+
+# Setting up our config.json file
+echo 'cp -n /temp/config.json ~/' >> /etc/services.d/lancache-cache-domains/run
+echo 's6-echo "Copied lancache-cache-domains config.json file"' >> /etc/services.d/lancache-cache-domains/run
+cp ~/config.json /tmp/cache-domains/scripts/
+
+# Make bash scripts executable
+chmod -v +x /etc/services.d/lancache-cache-domains/run
+chmod -v +x /tmp/cache-domains/scripts/create-dnsmasq.sh
+
+# Manually generating our dnsmasq files
+cd /tmp/cache-domains/scripts
+./create-dnsmasq.sh
+
+# Copying our files for Pi-hole to use 
+sudo cp -r /tmp/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
+
+# Automating the process
+echo 'cp -n /temp/lancache-dns-updates.sh ~/' >> /etc/services.d/lancache-cache-domains/run
+chmod -v +x ~/lancache-dns-updates.sh
+echo 's6-echo "Copied Updater Script File"' >> /etc/services.d/lancache-cache-domains/run
+echo '' >> /etc/cron.d/pihole-updatelists
