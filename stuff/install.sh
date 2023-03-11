@@ -1,12 +1,5 @@
 #!/bin/bash
 
-# install basic packages
-#apt-get -y update \
-#    && apt-get -y dist-upgrade \
-#    && apt-get -y install sudo bash nano curl wget php-cli php-sqlite3 php-intl php-curl
-    
-# install stubby
-#apt-get -Vy install stubby
 
 # clean stubby config
 mkdir -p /etc/stubby \
@@ -114,6 +107,13 @@ mkdir -p /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmas
 # Setting up our config.json file
 mkdir -p /etc/cache-domains/config
 cp -n /temp/config.json /etc/cache-domains/config/
+if [ -f \"/etc/cache-domains/scripts/config.json\" ]; then
+	rm /etc/cache-domains/scripts/config.json
+fi
+
+chown -v root:root /etc/cache-domains/config/*
+chmod -v 644 /etc/cache-domains/*
+
 ln -s /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json 
 
 # Make bash scripts executable
@@ -125,10 +125,6 @@ cd /etc/cache-domains/scripts
 
 # Copying our files for Pi-hole to use 
 sudo cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
-
-chown -v root:root /etc/cache-domains/*
-chmod -v 644 /etc/cache-domains/*
-chmod -v 666 /etc/cache-domains/config/config.json
 
 
 # Automating the process
