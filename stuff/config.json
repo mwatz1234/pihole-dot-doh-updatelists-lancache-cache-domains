@@ -1,6 +1,6 @@
 {
 	"ips": {
-		"generic":	"your.lancache.ip.address"
+		"generic":	"1.1.1.1"
 	},
 	"cache_domains": {
 		"default": 	"generic"
