@@ -94,8 +94,8 @@ chmod -v +x /etc/services.d/pihole-dot-doh/finish
 
 
 ### Lancache cache domains code below
-mkdir -v /etc/s6-overlay/s6-rc.d/_cachedomainsonboot
-mkdir -v /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d
+mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot
+mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d/pihole-FTL
 echo "oneshot" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/type
 echo "#!/command/execlineb
@@ -107,12 +107,12 @@ cd ~
 git clone https://github.com/uklans/cache-domains.git
 
 # Making copies of the files
-mkdir -v /etc/cache-domains/ && cp `find ~/cache-domains -name *.txt -o -name cache_domains.json` /etc/cache-domains
-mkdir -v /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmasq.sh /etc/cache-domains/scripts/
+mkdir -p /etc/cache-domains/ && cp `find ~/cache-domains -name *.txt -o -name cache_domains.json` /etc/cache-domains
+mkdir -p /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmasq.sh /etc/cache-domains/scripts/
 
 
 # Setting up our config.json file
-mkdir -v /etc/cache-domains/config
+mkdir -p /etc/cache-domains/config
 cp -n /temp/config.json /etc/cache-domains/config/
 
 # Make bash scripts executable
