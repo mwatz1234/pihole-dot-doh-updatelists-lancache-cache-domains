@@ -107,7 +107,7 @@ cd ~
 git clone https://github.com/uklans/cache-domains.git
 
 # Making copies of the files
-mkdir -p /etc/cache-domains/ && cp `find ~/cache-domains -name *.txt -o -name cache_domains.json` /etc/cache-domains
+mkdir -p /etc/cache-domains/ && cp \`find ~/cache-domains -name *.txt -o -name cache_domains.json\` /etc/cache-domains
 mkdir -p /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmasq.sh /etc/cache-domains/scripts/
 
 
@@ -127,6 +127,8 @@ sudo cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
 
 chown -v root:root /etc/cache-domains/*
 chmod -v 644 /etc/cache-domains/*
+chmod -v 666 /etc/cache-domains/config/config.json
+
 
 # Automating the process
 cp -n /temp/lancache-dns-updates.sh /usr/local/bin/
@@ -149,7 +151,7 @@ if [ ! -f "/etc/cron.d/cache-domains" ]; then
 		echo "# cache-domains Updater by mwatz1234
 # https://github.com/mwatz1234/pihole-dot-doh-updatelists-lancache-cache-domains
 
-#30 4 * * *   root   ~/lancache-dns-updates.sh
+#30 4 * * *   root   /usr/local/bin/lancache-dns-updates.sh
 " > /etc/cron.d/cache-domains
 		sed "s/#30 /$((1 + RANDOM % 58)) /" -i /etc/cron.d/cache-domains
 		echo "Created crontab (/etc/cron.d/cache-domains)"
