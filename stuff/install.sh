@@ -113,7 +113,7 @@ mkdir -p /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmas
 
 # Setting up our config.json file
 mkdir -p /etc/cache-domains/config
-cp -n /temp/config.json /etc/cache-domains/config/
+cp -n /temp/config.json /etc/cache-domains/scripts/
 
 # Make bash scripts executable
 chmod -v +x /etc/cache-domains/scripts/create-dnsmasq.sh
@@ -127,7 +127,7 @@ sudo cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
 
 chown -v root:root /etc/cache-domains/*
 chmod -v 644 /etc/cache-domains/*
-chmod -v 666 /etc/cache-domains/config/config.json
+chmod -v 666 /etc/cache-domains/scripts/config.json
 
 
 # Automating the process
