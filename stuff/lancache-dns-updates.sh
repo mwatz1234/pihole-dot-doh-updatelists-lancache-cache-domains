@@ -1,12 +1,10 @@
 #!/bin/bash
 
 ### Set variables, change as necessary ###
-# Username of the regular user you're using
-SYSTEMUSER=root
 # Directory the git repository is synced to
-GITSYNCDIR=/home/$SYSTEMUSER/cache-domains
+GITSYNCDIR=~/cache-domains
 # Your personalized config file from "Setting up our config.json file" step
-DNSMASQCONFIG=/home/$SYSTEMUSER/config.json
+DNSMASQCONFIG=/etc/cache-domains/config/config.json
 
 # Create a new, random temp directory and make sure it was created, else exit
 TEMPDIR=$(mktemp -d)
