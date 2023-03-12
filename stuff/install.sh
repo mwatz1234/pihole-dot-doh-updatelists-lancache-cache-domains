@@ -106,18 +106,18 @@ mkdir -p /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmas
 
 # Setting up our config.json file
 mkdir -p /etc/cache-domains/config
-cp -n /temp/config.json /etc/cache-domains/config/
+sudo cp -n /temp/config.json /etc/cache-domains/config/
 if [ -f \"/etc/cache-domains/scripts/config.json\" ]; then
-	rm /etc/cache-domains/scripts/config.json
+	sudo rm /etc/cache-domains/scripts/config.json
 fi
 
-chown -v root:root /etc/cache-domains/config/*
-chmod -v 644 /etc/cache-domains/*
+sudo chown -v root:root /etc/cache-domains/config/*
+sudo chmod -v 644 /etc/cache-domains/*
 
-ln -s /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json 
+sudo ln -s /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json 
 
 # Make bash scripts executable
-chmod -v +x /etc/cache-domains/scripts/create-dnsmasq.sh
+sudo chmod -v +x /etc/cache-domains/scripts/create-dnsmasq.sh
 
 # Manually generating our dnsmasq files
 cd /etc/cache-domains/scripts
@@ -128,10 +128,10 @@ sudo cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
 
 
 # Automating the process
-cp -n /temp/lancache-dns-updates.sh /usr/local/bin/
-chmod -v +x /usr/local/bin/lancache-dns-updates.sh
+sudo cp -n /temp/lancache-dns-updates.sh /usr/local/bin/
+sudo chmod -v +x /usr/local/bin/lancache-dns-updates.sh
 " >  /usr/local/bin/_cachedomainsonboot.sh
-chmod -v +x /usr/local/bin/_cachedomainsonboot.sh
+sudo chmod -v +x /usr/local/bin/_cachedomainsonboot.sh
 
 echo "Installed cache-domain files!"
 
