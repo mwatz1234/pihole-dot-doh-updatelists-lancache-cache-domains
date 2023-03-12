@@ -59,3 +59,6 @@ services:
        * Thanks oct8l (https://oct8l.gitlab.io/posts/2021/297/scripting-lancache-dns-updates-with-pi-hole/) for having a guide for updating cache-domains.  I took that knowledge and modified it for docker.
   * Stubby is a standard debian package
   * Cloudflared client was obtained from [official site](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#linux)
+  * If you like my work, [a donation to my hot tamales fund](https://paypal.me/mwatz1234) is very much appreciated.
+  
+  [![Donate](https://github.com/mwatz1234/pihole-dot-doh-updatelists/blob/master/donate-button-small.png)](https://paypal.me/mwatz1234)
