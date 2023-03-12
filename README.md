@@ -12,7 +12,7 @@ version: '3.0'
 services:
   pihole:
     container_name: pihole
-    image: mwatz/pihole-dot-doh-updatelists:latest
+    image: mwatz/pihole-dot-doh-updatelists-lancache-cache-domains:latest
     hostname: pihole
     domainname: pihole.local
     ports:
