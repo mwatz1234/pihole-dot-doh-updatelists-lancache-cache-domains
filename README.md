@@ -1,5 +1,5 @@
 # pihole-dot-doh-updatelists
-Official pihole docker with DoT (DNS over TLS), DoH (DNS over HTTPS), and jacklul/pihole-updatelists. 
+Official pihole docker with DoT (DNS over TLS), DoH (DNS over HTTPS), jacklul/pihole-updatelists, and uklans/cache-domains. 
 
 Multi-arch image built for both Raspberry Pi (arm64, arm32/v7, arm32/v6) and amd64.
 
@@ -39,9 +39,12 @@ services:
       - './etc/dnsmask:/etc/dnsmasq.d/:rw'
       - './etc/config:/config/:rw'
       - './etc/updatelists:/etc/pihole-updatelists/:rw'
+      - './etc/lancache/config.json:/etc/cache-domains/config/config.json'
     restart: unless-stopped
 ```
 ### Notes:
+* Create the lancache folder and config file (https://github.com/mwatz1234/pihole-dot-doh-updatelists-lancache-cache-domains/blob/master/stuff/config.json) for the docker volume before you start the docker
+      * This container will simply point pihole to your already configured and running lancache server (https://lancache.net/docs/containers/monolithic/) for the configured CDN's based on teh config file mentioned above (config.json).
 * Remember to set pihole env DNS1 and DNS2 to use the DoH / DoT IP below. If either DNS1 or DNS2 is NOT set, Pihole will use a non-encrypted service.
   * DoH service (cloudflared) runs at 127.1.1.1#5153. Uses cloudflare (1.1.1.1 / 1.0.0.1) by default
   * DoT service (stubby) runs at 127.2.2.2#5253. Uses google (8.8.8.8 / 8.8.4.4) by default
@@ -52,5 +55,7 @@ services:
   * Pihole base image is the official [pihole/pihole:latest](https://hub.docker.com/r/pihole/pihole/tags?page=1&name=latest)
   * doh and dot was based from https://github.com/testdasi/pihole-dot-doh
   * pihole-update lists is from https://github.com/jacklul/pihole-updatelists
+  * cache-domains is from https://github.com/uklans/cache-domains
+       * Thanks oct8l (https://oct8l.gitlab.io/posts/2021/297/scripting-lancache-dns-updates-with-pi-hole/) for having a guide for updating cache-domains.  I took that knowledge and modified it for docker.
   * Stubby is a standard debian package
   * Cloudflared client was obtained from [official site](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#linux)
