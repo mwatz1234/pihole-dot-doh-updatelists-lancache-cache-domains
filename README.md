@@ -1,4 +1,4 @@
-# pihole-dot-doh-updatelists-lancache-cache-domains
+# Pihole with dot, doh, updatelists, and cache domains for lancache
 Official pihole docker with DoT (DNS over TLS), DoH (DNS over HTTPS), jacklul/pihole-updatelists, and uklans/cache-domains. 
 
 Multi-arch image built for both Raspberry Pi (arm64, arm32/v7, arm32/v6) and amd64.
