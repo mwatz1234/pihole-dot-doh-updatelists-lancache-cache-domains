@@ -1,0 +1,21 @@
+listen_addresses:
+  - 127.0.0.1
+port: 5054
+
+# Order matters: first = primary, rest = fallback
+upstream:
+  # ===== DoT (PRIMARY) =====
+  - tls://1.1.1.1
+  - tls://1.0.0.1
+  - tls://9.9.9.9
+
+  # ===== DoH (FALLBACK) =====
+  - https://cloudflare-dns.com/dns-query
+  - https://dns.quad9.net/dns-query
+
+bootstrap:
+  - 1.1.1.1
+  - 9.9.9.9
+
+timeout: 10s
+cache: true
