@@ -12,7 +12,7 @@ version: '3.8'
 services:
   pihole:
     container_name: pihole
-    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain::1.0.0
+    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain::latest
     hostname: pihole
     domainname: pihole.local
     ports:
