@@ -6,13 +6,14 @@ set -e
 ########################################
 
 DNSPROXY_VERSION="0.71.2"
-ARCH=$(dpkg --print-architecture)
+ARCH=$(uname -m)
 
 case "$ARCH" in
-  amd64) DNSPROXY_ARCH="amd64" ;;
-  arm64) DNSPROXY_ARCH="arm64" ;;
-  armhf) DNSPROXY_ARCH="armv7" ;;
-  i386)  DNSPROXY_ARCH="386" ;;
+  x86_64) DNSPROXY_ARCH="amd64" ;;
+  aarch64) DNSPROXY_ARCH="arm64" ;;
+  armv7l) DNSPROXY_ARCH="armv7" ;;
+  armv6l) DNSPROXY_ARCH="armv6" ;;
+  i386) DNSPROXY_ARCH="386" ;;
   *)
     echo "Unsupported architecture: $ARCH"
     exit 1
@@ -61,15 +62,16 @@ chmod +x /etc/services.d/dnsproxy/finish
 # Cleanup
 ########################################
 
-apt-get -y autoremove \
-    && apt-get -y autoclean \
-    && apt-get -y clean \
-    && rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
+apk del --no-cache \
+    curl wget tar \
+    || true
+rm -rf /tmp/* /var/tmp/*
 
 ########################################
-# Lancache / cache-domains section (patched)
+# Lancache / cache-domains setup
 ########################################
 
+# Create s6 service for cache-domains on boot
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d/pihole-FTL
@@ -80,6 +82,7 @@ cat << 'EOF' > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/up
 background { bash -e /usr/local/bin/_cachedomainsonboot.sh }
 EOF
 
+# cache-domains install script
 cat << 'EOF' > /usr/local/bin/_cachedomainsonboot.sh
 #!/bin/bash
 set -e
@@ -87,12 +90,12 @@ set -e
 WORKDIR=/root
 cd $WORKDIR
 
-# Clone repo only if missing
+# Clone repo if missing
 if [ ! -d "$WORKDIR/cache-domains" ]; then
     git clone https://github.com/uklans/cache-domains.git
 fi
 
-# Copy domain files and scripts
+# Copy domains and scripts
 mkdir -p /etc/cache-domains/
 cp $(find "$WORKDIR/cache-domains" -name "*.txt" -o -name "cache_domains.json") /etc/cache-domains
 
@@ -100,7 +103,7 @@ mkdir -p /etc/cache-domains/scripts/
 cp "$WORKDIR/cache-domains/scripts/create-dnsmasq.sh" /etc/cache-domains/scripts/
 chmod +x /etc/cache-domains/scripts/create-dnsmasq.sh
 
-# Copy config
+# Copy user config
 mkdir -p /etc/cache-domains/config
 cp -n /temp/config.json /etc/cache-domains/config/
 rm -f /etc/cache-domains/scripts/config.json
