@@ -6,8 +6,10 @@ ARG FRM
 ARG TAG
 ARG TARGETPLATFORM
 
+USER root
+
 RUN apt-get update && \
-    apt-get install -Vy \
+    apt-get install -y --no-install-recommends \
         sudo \
         bash \
         nano \
@@ -17,7 +19,9 @@ RUN apt-get update && \
         php-sqlite3 \
         php-intl \
         php-curl \
-        git
+        git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 ADD stuff /temp
 
