@@ -8,7 +8,7 @@ ARG TARGETPLATFORM
 
 USER root
 
-# Install dependencies via apk
+# Install dependencies via apk (Alpine-friendly)
 RUN apk add --no-cache \
         bash \
         sudo \
