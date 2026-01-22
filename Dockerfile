@@ -8,26 +8,32 @@ ARG TARGETPLATFORM
 
 USER root
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        sudo \
+# Install dependencies via Alpine's apk (replaces apt-get)
+RUN apk add --no-cache \
         bash \
+        sudo \
         nano \
         curl \
         wget \
+        git \
+        php \
         php-cli \
-        php-sqlite3 \
+        php-pdo_sqlite \
         php-intl \
         php-curl \
-        git \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        php-openssl \
+        php-pcntl \
+        php-posix
 
+# Add your scripts
 ADD stuff /temp
 
+# Run install script (dnsproxy + cache-domains)
 RUN /bin/bash /temp/install.sh \
-    && rm -f /temp/install.sh
+    && rm -rf /temp
 
+# Pi-hole updatelists
 RUN wget -O - https://raw.githubusercontent.com/jacklul/pihole-updatelists/master/install.sh | bash /dev/stdin docker
 
+# Build info
 RUN echo "$(date "+%d.%m.%Y %T") Built from ${FRM} with tag ${TAG}" >> /build_date.info
