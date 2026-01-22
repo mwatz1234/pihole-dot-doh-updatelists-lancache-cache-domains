@@ -2,10 +2,8 @@
 set -e
 
 ########################################
-# Install dnsproxy (DoT + DoH fallback)
+# Detect architecture for dnsproxy
 ########################################
-
-DNSPROXY_VERSION="0.71.2"
 ARCH=$(uname -m)
 
 case "$ARCH" in
@@ -20,10 +18,28 @@ case "$ARCH" in
     ;;
 esac
 
-echo "Installing dnsproxy for architecture: $DNSPROXY_ARCH"
+echo "Detected architecture: $DNSPROXY_ARCH"
+
+########################################
+# Install latest stable dnsproxy
+########################################
+echo "Fetching latest stable dnsproxy release..."
+
+DNSPROXY_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/dnsproxy/releases \
+  | grep -E '"tag_name": "v[0-9]+\.[0-9]+\.[0-9]+"' \
+  | head -n 1 \
+  | grep -Po 'v[0-9]+\.[0-9]+\.[0-9]+')
+
+if [ -z "$DNSPROXY_VERSION" ]; then
+    echo "Failed to detect latest dnsproxy release"
+    exit 1
+fi
+
+DNSPROXY_VERSION_NUMBER="${DNSPROXY_VERSION#v}"
+echo "Latest stable dnsproxy release: $DNSPROXY_VERSION_NUMBER"
 
 curl -sL \
-  https://github.com/AdguardTeam/dnsproxy/releases/download/v${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION}.tar.gz \
+  "https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION_NUMBER}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION_NUMBER}.tar.gz" \
   -o /tmp/dnsproxy.tar.gz
 
 tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
@@ -31,16 +47,14 @@ cp /tmp/linux-${DNSPROXY_ARCH}/dnsproxy /usr/local/bin/dnsproxy
 chmod +x /usr/local/bin/dnsproxy
 
 ########################################
-# Default dnsproxy config
+# Default dnsproxy configuration
 ########################################
-
 mkdir -p /config
 cp -n /temp/dnsproxy.yml /config/dnsproxy.yml
 
 ########################################
 # s6 service for dnsproxy
 ########################################
-
 mkdir -p /etc/services.d/dnsproxy
 
 cat << 'EOF' > /etc/services.d/dnsproxy/run
@@ -59,19 +73,13 @@ chmod +x /etc/services.d/dnsproxy/run
 chmod +x /etc/services.d/dnsproxy/finish
 
 ########################################
-# Cleanup
+# Cleanup temporary files
 ########################################
-
-apk del --no-cache \
-    curl wget tar \
-    || true
 rm -rf /tmp/* /var/tmp/*
 
 ########################################
 # Lancache / cache-domains setup
 ########################################
-
-# Create s6 service for cache-domains on boot
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d/pihole-FTL
@@ -82,7 +90,7 @@ cat << 'EOF' > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/up
 background { bash -e /usr/local/bin/_cachedomainsonboot.sh }
 EOF
 
-# cache-domains install script
+# cache-domains boot script
 cat << 'EOF' > /usr/local/bin/_cachedomainsonboot.sh
 #!/bin/bash
 set -e
@@ -95,10 +103,11 @@ if [ ! -d "$WORKDIR/cache-domains" ]; then
     git clone https://github.com/uklans/cache-domains.git
 fi
 
-# Copy domains and scripts
+# Copy domain files
 mkdir -p /etc/cache-domains/
 cp $(find "$WORKDIR/cache-domains" -name "*.txt" -o -name "cache_domains.json") /etc/cache-domains
 
+# Copy scripts
 mkdir -p /etc/cache-domains/scripts/
 cp "$WORKDIR/cache-domains/scripts/create-dnsmasq.sh" /etc/cache-domains/scripts/
 chmod +x /etc/cache-domains/scripts/create-dnsmasq.sh
