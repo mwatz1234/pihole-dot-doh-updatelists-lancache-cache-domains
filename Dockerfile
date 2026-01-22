@@ -7,7 +7,17 @@ ARG TAG
 ARG TARGETPLATFORM
 
 RUN apt-get update && \
-    apt-get install -Vy sudo bash nano curl wget php-cli php-sqlite3 php-intl php-curl stubby git
+    apt-get install -Vy \
+        sudo \
+        bash \
+        nano \
+        curl \
+        wget \
+        php-cli \
+        php-sqlite3 \
+        php-intl \
+        php-curl \
+        git
 
 ADD stuff /temp
 
