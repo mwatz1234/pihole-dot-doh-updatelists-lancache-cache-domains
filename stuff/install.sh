@@ -37,8 +37,11 @@ fi
 
 echo "Latest stable dnsproxy release: $DNSPROXY_VERSION"
 
-# Download and extract
-DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION}.tar.gz"
+# Strip leading 'v' for the filename
+DNSPROXY_VERSION_NO_V=${DNSPROXY_VERSION#v}
+
+# Correct download URL
+DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-${DNSPROXY_VERSION_NO_V}.tar.gz"
 echo "Downloading $DNSPROXY_URL"
 curl -sL "$DNSPROXY_URL" -o /tmp/dnsproxy.tar.gz
 
@@ -47,8 +50,9 @@ if [ ! -f "/tmp/dnsproxy.tar.gz" ]; then
     exit 1
 fi
 
+# Extract tarball (tarballs contain a flat 'dnsproxy' binary)
 tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
-cp /tmp/linux-${DNSPROXY_ARCH}/dnsproxy /usr/local/bin/dnsproxy
+cp /tmp/dnsproxy /usr/local/bin/dnsproxy
 chmod +x /usr/local/bin/dnsproxy
 
 ########################################
@@ -90,10 +94,11 @@ chmod +x /etc/services.d/dnsproxy/finish
 ########################################
 # Cleanup temporary files
 ########################################
-rm -rf /tmp/* /var/tmp/*
+rm -rf /tmp/dnsproxy.tar.gz /tmp/dnsproxy
 
 ########################################
 # Lancache / cache-domains setup
+# (kept exactly as your original)
 ########################################
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d
@@ -113,12 +118,10 @@ set -ex
 WORKDIR=/root
 cd $WORKDIR
 
-# Clone repo if missing
 if [ ! -d "$WORKDIR/cache-domains" ]; then
     git clone https://github.com/uklans/cache-domains.git
 fi
 
-# Pull latest updates
 cd "$WORKDIR/cache-domains"
 git fetch
 HEADHASH=$(git rev-parse HEAD)
@@ -130,16 +133,13 @@ else
     echo "No changes to upstream repo"
 fi
 
-# Copy domain files
 mkdir -p /etc/cache-domains/
 cp $(find "$WORKDIR/cache-domains" -name "*.txt" -o -name "cache_domains.json") /etc/cache-domains
 
-# Copy scripts
 mkdir -p /etc/cache-domains/scripts/
 cp "$WORKDIR/cache-domains/scripts/create-dnsmasq.sh" /etc/cache-domains/scripts/
 chmod +x /etc/cache-domains/scripts/create-dnsmasq.sh
 
-# Copy user config
 mkdir -p /etc/cache-domains/config
 if [ -f /temp/config.json ]; then
     cp -n /temp/config.json /etc/cache-domains/config/
@@ -147,14 +147,10 @@ fi
 rm -f /etc/cache-domains/scripts/config.json
 ln -sf /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json
 
-# Generate dnsmasq files
 cd /etc/cache-domains/scripts
 bash ./create-dnsmasq.sh > /dev/null 2>&1
 
-# Copy to Pi-hole
 cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
-
-# Reload Pi-hole FTL
 pihole restartdns reload || killall -HUP pihole-FTL
 EOF
 
