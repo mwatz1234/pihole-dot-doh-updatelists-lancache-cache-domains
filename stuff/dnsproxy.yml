@@ -1,20 +1,78 @@
-listen_addresses:
-  - 127.0.0.1
-port: 5054
+# dnsproxy configuration for Pi-hole + Cloudflare filters
+# Supports:
+# - DNS-over-TLS (DoT)
+# - DNS-over-HTTPS (DoH) fallback
+# - Multiple Cloudflare filters (default, family, malware, adult)
+# - Caching and bootstrap
 
-# Primary DoT upstream
+listen_addresses:
+  - 127.0.0.1      # Internal only
+port: 5054          # Pi-hole upstream points here
+
+# ================================
+# Upstream DNS servers (order matters)
+# First reachable upstream is used
+# ================================
+
 upstream:
+  ############################################################
+  # ===== Primary DoT (DNS-over-TLS) =====
+  ############################################################
+  
+  # Cloudflare Default (fast, privacy-friendly)
   - tls://1.1.1.1
   - tls://1.0.0.1
-  - tls://9.9.9.9
 
-  # DoH fallback
+  # Cloudflare Family (blocks adult content)
+  #- tls://1.1.1.3
+  #- tls://1.0.0.3
+
+  # Cloudflare Malware / unsafe content (malware/ad domains)
+  #- tls://1.1.1.2
+  #- tls://1.0.0.2
+
+  # Quad9 malware filter (optional redundancy)
+  #- tls://9.9.9.9
+
+  ############################################################
+  # ===== Fallback DoH (DNS-over-HTTPS) =====
+  ############################################################
+
+  # Cloudflare Default DoH
   - https://cloudflare-dns.com/dns-query
-  - https://dns.quad9.net/dns-query
 
+  # Cloudflare Family DoH
+  #- https://family.cloudflare-dns.com/dns-query
+
+  # Cloudflare Malware / Adult DoH
+  #- https://security.cloudflare-dns.com/dns-query
+
+  # Quad9 DoH fallback (malware blocking)
+  #- https://dns.quad9.net/dns-query
+
+# ================================
+# Bootstrap IPs for initial resolution
+# ================================
 bootstrap:
   - 1.1.1.1
+  - 1.0.0.1
   - 9.9.9.9
 
+# Query timeout
 timeout: 10s
+
+# Enable caching
 cache: true
+
+# ================================
+# Notes:
+# - The order matters: dnsproxy tries each upstream in sequence.
+# - DoT servers are first, DoH used as fallback.
+# - Cloudflare filters:
+#   * Default: standard privacy-friendly DNS
+#   * Family: blocks adult content (good for kids)
+#   * Malware/Security: blocks malware and unsafe domains
+#   * Adult: strict adult content blocking
+# - You can remove or comment upstreams you don’t want
+# - Combine with Pi-hole for full local blocklists
+# - dnsproxy automatically fails over if a server is down
