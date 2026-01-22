@@ -1,19 +1,19 @@
 #!/bin/bash
-set -e
+set -ex  # Print commands and exit on first failure
 
 ########################################
-# Detect architecture for dnsproxy
+# Detect target platform (for GitHub Actions buildx)
 ########################################
-ARCH=$(uname -m)
+: "${TARGETPLATFORM:=$(uname -m)}"
 
-case "$ARCH" in
-  x86_64) DNSPROXY_ARCH="amd64" ;;
-  aarch64) DNSPROXY_ARCH="arm64" ;;
-  armv7l) DNSPROXY_ARCH="armv7" ;;
-  armv6l) DNSPROXY_ARCH="armv6" ;;
-  i386) DNSPROXY_ARCH="386" ;;
+case "$TARGETPLATFORM" in
+  linux/amd64|x86_64) DNSPROXY_ARCH="amd64" ;;
+  linux/arm64|aarch64) DNSPROXY_ARCH="arm64" ;;
+  linux/arm/v7|armv7l) DNSPROXY_ARCH="armv7" ;;
+  linux/arm/v6|armv6l) DNSPROXY_ARCH="armv6" ;;
+  linux/386|i386) DNSPROXY_ARCH="386" ;;
   *)
-    echo "Unsupported architecture: $ARCH"
+    echo "Unsupported platform: $TARGETPLATFORM"
     exit 1
     ;;
 esac
@@ -24,8 +24,8 @@ echo "Detected architecture: $DNSPROXY_ARCH"
 # Install latest stable dnsproxy
 ########################################
 echo "Fetching latest stable dnsproxy release..."
-
-DNSPROXY_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/dnsproxy/releases \
+DNSPROXY_VERSION=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+  https://api.github.com/repos/AdguardTeam/dnsproxy/releases \
   | grep -E '"tag_name": "v[0-9]+\.[0-9]+\.[0-9]+"' \
   | head -n 1 \
   | grep -Po 'v[0-9]+\.[0-9]+\.[0-9]+')
@@ -38,16 +38,22 @@ fi
 DNSPROXY_VERSION_NUMBER="${DNSPROXY_VERSION#v}"
 echo "Latest stable dnsproxy release: $DNSPROXY_VERSION_NUMBER"
 
+# Download and extract
 curl -sL \
   "https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION_NUMBER}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION_NUMBER}.tar.gz" \
   -o /tmp/dnsproxy.tar.gz
+
+if [ ! -f "/tmp/dnsproxy.tar.gz" ]; then
+    echo "dnsproxy tarball missing!"
+    exit 1
+fi
 
 tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
 cp /tmp/linux-${DNSPROXY_ARCH}/dnsproxy /usr/local/bin/dnsproxy
 chmod +x /usr/local/bin/dnsproxy
 
 ########################################
-# Default dnsproxy configuration
+# Default dnsproxy config
 ########################################
 mkdir -p /config
 cp -n /temp/dnsproxy.yml /config/dnsproxy.yml
@@ -66,7 +72,7 @@ EOF
 cat << 'EOF' > /etc/services.d/dnsproxy/finish
 #!/bin/bash
 s6-echo "Stopping dnsproxy"
-killall -9 dnsproxy
+killall -9 dnsproxy || true
 EOF
 
 chmod +x /etc/services.d/dnsproxy/run
@@ -93,7 +99,7 @@ EOF
 # cache-domains boot script
 cat << 'EOF' > /usr/local/bin/_cachedomainsonboot.sh
 #!/bin/bash
-set -e
+set -ex
 
 WORKDIR=/root
 cd $WORKDIR
@@ -101,6 +107,18 @@ cd $WORKDIR
 # Clone repo if missing
 if [ ! -d "$WORKDIR/cache-domains" ]; then
     git clone https://github.com/uklans/cache-domains.git
+fi
+
+# Pull latest updates
+cd "$WORKDIR/cache-domains"
+git fetch
+HEADHASH=$(git rev-parse HEAD)
+UPSTREAMHASH=$(git rev-parse master@{upstream})
+if [ "$HEADHASH" != "$UPSTREAMHASH" ]; then
+    echo "Upstream repo changed, pulling..."
+    git pull
+else
+    echo "No changes to upstream repo"
 fi
 
 # Copy domain files
