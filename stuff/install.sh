@@ -1,158 +1,151 @@
 #!/bin/bash
+set -e
 
+########################################
+# Install dnsproxy (DoT replacement)
+########################################
 
-# clean stubby config
-mkdir -p /etc/stubby \
-    && rm -f /etc/stubby/stubby.yml
+DNSPROXY_VERSION="0.71.2"
+ARCH=$(dpkg --print-architecture)
 
-DETECTED_ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+  amd64) DNSPROXY_ARCH="amd64" ;;
+  arm64) DNSPROXY_ARCH="arm64" ;;
+  armhf) DNSPROXY_ARCH="armv7" ;;
+  i386)  DNSPROXY_ARCH="386" ;;
+  *)
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+    ;;
+esac
 
-# install cloudflared
-mkdir -p /tmp \
-    && cd /tmp
-if [[ ${TARGETPLATFORM} =~ "arm64" ]]
-then
-    curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cloudflared.deb
-    dpkg --add-architecture arm64
-    echo "$(date "+%d.%m.%Y %T") Added cloudflared for ${TARGETPLATFORM}" >> /build.info
-elif [[ ${TARGETPLATFORM} =~ "amd64" ]]
-then 
-    curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
-    dpkg --add-architecture amd64
-    echo "$(date "+%d.%m.%Y %T") Added cloudflared for ${TARGETPLATFORM}" >> /build.info
-elif [[ ${TARGETPLATFORM} =~ "386" ]]
-then
-    curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-386.deb -o /tmp/cloudflared.deb
-    dpkg --add-architecture 386
-    echo "$(date "+%d.%m.%Y %T") Added cloudflared for ${TARGETPLATFORM}" >> /build.info
-elif [[ ${TARGETPLATFORM} =~ 'arm/v7' ]]
-then
-    curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm.deb -o /tmp/cloudflared.deb
-    dpkg --add-architecture arm
-    echo "$(date "+%d.%m.%Y %T") Added cloudflared for ${TARGETPLATFORM}" >> /build.info
-elif [[ ${TARGETPLATFORM} =~ 'arm/v6' ]]
-then
-    #curl -sL https://hobin.ca/cloudflared/latest?type=deb -o /tmp/cloudflared.deb
-    wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm
-else 
-    echo "$(date "+%d.%m.%Y %T") Unsupported platform - cloudflared not added" >> /build.info
-fi
-  if [[ ${TARGETPLATFORM} =~ 'arm/v6' ]]
-  then
-    sudo cp ./cloudflared-linux-arm /usr/local/bin/cloudflared
-    sudo chmod +x /usr/local/bin/cloudflared
-    cloudflared -v    
-  else
-    apt install /tmp/cloudflared.deb \
-        && rm -f /tmp/cloudflared.deb \
-        && useradd -s /usr/sbin/nologin -r -M cloudflared \
-        && chown cloudflared:cloudflared /usr/local/bin/cloudflared
-  fi
+echo "Installing dnsproxy for architecture: $DNSPROXY_ARCH"
 
-# clean cloudflared config
-mkdir -p /etc/cloudflared \
-    && rm -f /etc/cloudflared/config.yml
+curl -sL \
+  https://github.com/AdguardTeam/dnsproxy/releases/download/v${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION}.tar.gz \
+  -o /tmp/dnsproxy.tar.gz
 
-# clean up
+tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
+cp /tmp/linux-${DNSPROXY_ARCH}/dnsproxy /usr/local/bin/dnsproxy
+chmod +x /usr/local/bin/dnsproxy
+
+########################################
+# Default dnsproxy config
+########################################
+
+mkdir -p /config
+cp -n /temp/dnsproxy.yml /config/dnsproxy.yml
+
+########################################
+# s6 service for dnsproxy
+########################################
+
+mkdir -p /etc/services.d/dnsproxy
+
+cat << 'EOF' > /etc/services.d/dnsproxy/run
+#!/bin/bash
+s6-echo "Starting dnsproxy (DNS-over-TLS)"
+exec /usr/local/bin/dnsproxy --config-path=/config/dnsproxy.yml
+EOF
+
+cat << 'EOF' > /etc/services.d/dnsproxy/finish
+#!/bin/bash
+s6-echo "Stopping dnsproxy"
+killall -9 dnsproxy
+EOF
+
+chmod +x /etc/services.d/dnsproxy/run
+chmod +x /etc/services.d/dnsproxy/finish
+
+########################################
+# Cleanup
+########################################
+
 apt-get -y autoremove \
     && apt-get -y autoclean \
     && apt-get -y clean \
-    && rm -fr /tmp/* /var/tmp/* /var/lib/apt/lists/*
+    && rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 
-# Creating pihole-dot-doh service
-mkdir -p /etc/services.d/pihole-dot-doh
+########################################
+# Lancache / cache-domains section (patched)
+########################################
 
-# run file
-echo '#!/bin/bash' > /etc/services.d/pihole-dot-doh/run
-# Copy config file if not exists
-echo 'cp -n /temp/stubby.yml /config/' >> /etc/services.d/pihole-dot-doh/run
-echo 'cp -n /temp/cloudflared.yml /config/' >> /etc/services.d/pihole-dot-doh/run
-# run stubby in background
-echo 's6-echo "Starting stubby"' >> /etc/services.d/pihole-dot-doh/run
-echo 'stubby -g -C /config/stubby.yml' >> /etc/services.d/pihole-dot-doh/run
-# run cloudflared in foreground
-echo 's6-echo "Starting cloudflared"' >> /etc/services.d/pihole-dot-doh/run
-echo '/usr/local/bin/cloudflared --config /config/cloudflared.yml' >> /etc/services.d/pihole-dot-doh/run
-
-# finish file
-echo '#!/bin/bash' > /etc/services.d/pihole-dot-doh/finish
-echo 's6-echo "Stopping stubby"' >> /etc/services.d/pihole-dot-doh/finish
-echo 'killall -9 stubby' >> /etc/services.d/pihole-dot-doh/finish
-echo 's6-echo "Stopping cloudflared"' >> /etc/services.d/pihole-dot-doh/finish
-echo 'killall -9 cloudflared' >> /etc/services.d/pihole-dot-doh/finish
-
-# Make bash scripts executable
-chmod -v +x /etc/services.d/pihole-dot-doh/run
-chmod -v +x /etc/services.d/pihole-dot-doh/finish
-
-
-### Lancache cache domains code below
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot
 mkdir -p /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/dependencies.d/pihole-FTL
 echo "oneshot" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/type
-echo "#!/command/execlineb
-background { bash -e /usr/local/bin/_cachedomainsonboot.sh }" > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/up
 
-echo "#!/bin/bash
-# Grabbing the repo
-cd ~
-git clone https://github.com/uklans/cache-domains.git
+cat << 'EOF' > /etc/s6-overlay/s6-rc.d/_cachedomainsonboot/up
+#!/command/execlineb
+background { bash -e /usr/local/bin/_cachedomainsonboot.sh }
+EOF
 
-# Making copies of the files
-mkdir -p /etc/cache-domains/ && cp \`find ~/cache-domains -name *.txt -o -name cache_domains.json\` /etc/cache-domains
-mkdir -p /etc/cache-domains/scripts/ && cp ~/cache-domains/scripts/create-dnsmasq.sh /etc/cache-domains/scripts/
+# ------------------------
+# Patched _cachedomainsonboot.sh
+# ------------------------
+cat << 'EOF' > /usr/local/bin/_cachedomainsonboot.sh
+#!/bin/bash
+set -e
 
+# Use absolute path
+WORKDIR=/root
+cd $WORKDIR
 
-# Setting up our config.json file
-mkdir -p /etc/cache-domains/config
-sudo cp -n /temp/config.json /etc/cache-domains/config/
-if [ -f \"/etc/cache-domains/scripts/config.json\" ]; then
-	sudo rm /etc/cache-domains/scripts/config.json
+# Clone repo only if it does not exist
+if [ ! -d "$WORKDIR/cache-domains" ]; then
+    git clone https://github.com/uklans/cache-domains.git
 fi
 
-sudo chown -v root:root /etc/cache-domains/config/*
-sudo chmod -v 644 /etc/cache-domains/*
+# Copy files
+mkdir -p /etc/cache-domains/
+cp $(find $WORKDIR/cache-domains -name "*.txt" -o -name "cache_domains.json") /etc/cache-domains
 
-sudo ln -s /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json 
+mkdir -p /etc/cache-domains/scripts/
+cp $WORKDIR/cache-domains/scripts/create-dnsmasq.sh /etc/cache-domains/scripts/
 
-# Make bash scripts executable
-sudo chmod -v +x /etc/cache-domains/scripts/create-dnsmasq.sh
+# Config
+mkdir -p /etc/cache-domains/config
+cp -n /temp/config.json /etc/cache-domains/config/
+rm -f /etc/cache-domains/scripts/config.json
+ln -sf /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json
 
-# Manually generating our dnsmasq files
+chmod +x /etc/cache-domains/scripts/create-dnsmasq.sh
+
+# Generate dnsmasq files
 cd /etc/cache-domains/scripts
 ./create-dnsmasq.sh
 
-# Copying our files for Pi-hole to use 
-sudo cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
+# Copy dnsmasq output to Pi-hole
+cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
 
+# Install update script
+cp -n /temp/lancache-dns-updates.sh /usr/local/bin/
+chmod +x /usr/local/bin/lancache-dns-updates.sh
 
-# Automating the process
-sudo cp -n /temp/lancache-dns-updates.sh /usr/local/bin/
-sudo chmod -v +x /usr/local/bin/lancache-dns-updates.sh
-" >  /usr/local/bin/_cachedomainsonboot.sh
-sudo chmod -v +x /usr/local/bin/_cachedomainsonboot.sh
+# Reload Pi-hole FTL to pick up new configs
+pihole restartdns reload || killall -HUP pihole-FTL
+EOF
 
-echo "Installed cache-domain files!"
+chmod +x /usr/local/bin/_cachedomainsonboot.sh
 
-if [ ! -d "/etc/s6-overlay/s6-rc.d/_postFTL" ]; then
-    echo "Missing /etc/s6-overlay/s6-rc.d/_postFTL directory"
-    exit 1
-fi
-
-mkdir -pv /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d
+# ------------------------
+# Post-FTL dependency
+# ------------------------
+mkdir -p /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d/_cachedomainsonboot
-echo "Added dependency to _postFTL service (/etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d/_cachedomainsonboot)!"
 
+# ------------------------
+# Cron job for cache-domains updates
+# ------------------------
 if [ ! -f "/etc/cron.d/cache-domains" ]; then
-		echo "# cache-domains Updater by mwatz1234
+cat << 'EOF' > /etc/cron.d/cache-domains
+# cache-domains Updater by mwatz1234
 # https://github.com/mwatz1234/pihole-dot-doh-updatelists-lancache-cache-domains
 
-#30 4 * * *   root   /usr/local/bin/lancache-dns-updates.sh
-" > /etc/cron.d/cache-domains
-		sed "s/#30 /$((1 + RANDOM % 58)) /" -i /etc/cron.d/cache-domains
-		echo "Created crontab (/etc/cron.d/cache-domains)"
-	fi        
+#30 4 * * * root /usr/local/bin/lancache-dns-updates.sh
+EOF
+# Randomize minute
+sed "s/#30 /$((1 + RANDOM % 58)) /" -i /etc/cron.d/cache-domains
+fi
 
-echo "Created crontab line for cache-domains"
-    
+echo "dnsproxy + cache-domains installation complete"
