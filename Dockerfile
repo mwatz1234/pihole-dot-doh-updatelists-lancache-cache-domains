@@ -8,7 +8,7 @@ ARG TARGETPLATFORM
 
 USER root
 
-# Install dependencies via Alpine's apk (replaces apt-get)
+# Install dependencies via apk
 RUN apk add --no-cache \
         bash \
         sudo \
@@ -19,16 +19,16 @@ RUN apk add --no-cache \
         php \
         php-cli \
         php-pdo_sqlite \
-        php-intl \
         php-curl \
+        php-intl \
         php-openssl \
         php-pcntl \
         php-posix
 
-# Add your scripts
+# Copy scripts & configs
 ADD stuff /temp
 
-# Run install script (dnsproxy + cache-domains)
+# Run installation (dnsproxy + cache-domains)
 RUN /bin/bash /temp/install.sh \
     && rm -rf /temp
 
