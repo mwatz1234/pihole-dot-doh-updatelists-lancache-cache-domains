@@ -2,7 +2,7 @@
 set -ex  # Print commands and exit on first failure
 
 ########################################
-# Detect target platform (for multi-arch)
+# Detect target platform
 ########################################
 : "${TARGETPLATFORM:=$(uname -m)}"
 
@@ -12,7 +12,7 @@ case "$TARGETPLATFORM" in
   linux/arm/v7|armv7l) DNSPROXY_ARCH="armv7" ;;
   linux/arm/v6|armv6l) DNSPROXY_ARCH="armv6" ;;
   linux/386|i386) DNSPROXY_ARCH="386" ;;
-  *) 
+  *)
     echo "Unsupported platform: $TARGETPLATFORM"
     exit 1
     ;;
@@ -21,12 +21,13 @@ esac
 echo "Detected architecture: $DNSPROXY_ARCH"
 
 ########################################
-# Fetch latest stable dnsproxy release
+# Install latest stable dnsproxy
 ########################################
+echo "Fetching latest stable dnsproxy release..."
 DNSPROXY_VERSION=$(curl -s -H "Accept: application/vnd.github.v3+json" \
   https://api.github.com/repos/AdguardTeam/dnsproxy/releases \
   | grep -E '"tag_name": "v[0-9]+\.[0-9]+\.[0-9]+"' \
-  | head -n1 \
+  | head -n 1 \
   | grep -Po 'v[0-9]+\.[0-9]+\.[0-9]+')
 
 if [ -z "$DNSPROXY_VERSION" ]; then
@@ -34,13 +35,12 @@ if [ -z "$DNSPROXY_VERSION" ]; then
     exit 1
 fi
 
-DNSPROXY_VERSION_NUMBER="${DNSPROXY_VERSION#v}"
-echo "Latest stable dnsproxy release: $DNSPROXY_VERSION_NUMBER"
+echo "Latest stable dnsproxy release: $DNSPROXY_VERSION"
 
 # Download and extract
-curl -sL \
-  "https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION_NUMBER}.tar.gz" \
-  -o /tmp/dnsproxy.tar.gz
+DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-v${DNSPROXY_VERSION}.tar.gz"
+echo "Downloading $DNSPROXY_URL"
+curl -sL "$DNSPROXY_URL" -o /tmp/dnsproxy.tar.gz
 
 if [ ! -f "/tmp/dnsproxy.tar.gz" ]; then
     echo "dnsproxy tarball missing!"
@@ -48,19 +48,22 @@ if [ ! -f "/tmp/dnsproxy.tar.gz" ]; then
 fi
 
 tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
-mv /tmp/dnsproxy /usr/local/bin/dnsproxy
+cp /tmp/linux-${DNSPROXY_ARCH}/dnsproxy /usr/local/bin/dnsproxy
 chmod +x /usr/local/bin/dnsproxy
 
 ########################################
 # Default dnsproxy config
 ########################################
 mkdir -p /config
-if [ ! -f /config/dnsproxy.yml ]; then
-cat << 'EOF' > /config/dnsproxy.yml
-listen: 127.0.0.1:5053
-upstream_dns:
-  - https://dns.google/dns-query
-cache_size: 10000
+if [ -f /temp/dnsproxy.yml ]; then
+    cp -n /temp/dnsproxy.yml /config/dnsproxy.yml
+else
+    cat << 'EOF' > /config/dnsproxy.yml
+bind-address: 0.0.0.0:5053
+upstream:
+  - tls://1.1.1.1
+  - tls://1.0.0.1
+log-level: info
 EOF
 fi
 
@@ -110,13 +113,21 @@ set -ex
 WORKDIR=/root
 cd $WORKDIR
 
-# Clone or update repo
+# Clone repo if missing
 if [ ! -d "$WORKDIR/cache-domains" ]; then
     git clone https://github.com/uklans/cache-domains.git
+fi
+
+# Pull latest updates
+cd "$WORKDIR/cache-domains"
+git fetch
+HEADHASH=$(git rev-parse HEAD)
+UPSTREAMHASH=$(git rev-parse master@{upstream})
+if [ "$HEADHASH" != "$UPSTREAMHASH" ]; then
+    echo "Upstream repo changed, pulling..."
+    git pull
 else
-    cd "$WORKDIR/cache-domains"
-    git fetch
-    git reset --hard origin/master
+    echo "No changes to upstream repo"
 fi
 
 # Copy domain files
@@ -128,16 +139,11 @@ mkdir -p /etc/cache-domains/scripts/
 cp "$WORKDIR/cache-domains/scripts/create-dnsmasq.sh" /etc/cache-domains/scripts/
 chmod +x /etc/cache-domains/scripts/create-dnsmasq.sh
 
-# User config
+# Copy user config
 mkdir -p /etc/cache-domains/config
-if [ ! -f /etc/cache-domains/config/config.json ]; then
-cat << 'CONFIG' > /etc/cache-domains/config/config.json
-{
-  "example": true
-}
-CONFIG
+if [ -f /temp/config.json ]; then
+    cp -n /temp/config.json /etc/cache-domains/config/
 fi
-
 rm -f /etc/cache-domains/scripts/config.json
 ln -sf /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json
 
@@ -161,10 +167,12 @@ echo "" > /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d/_cachedomainsonboot
 # Cron job for cache-domains updates
 if [ ! -f "/etc/cron.d/cache-domains" ]; then
 cat << 'EOF' > /etc/cron.d/cache-domains
-# cache-domains Updater
-# Randomized daily run time
-# * * * * * root /usr/local/bin/lancache-dns-updates.sh
+# cache-domains Updater by mwatz1234
+# https://github.com/mwatz1234/pihole-dot-doh-updatelists-lancache-cache-domains
+#30 4 * * * root /usr/local/bin/lancache-dns-updates.sh
 EOF
+# Randomize minute
+sed "s/#30 /$((1 + RANDOM % 58)) /" -i /etc/cron.d/cache-domains
 fi
 
 echo "dnsproxy + cache-domains installation complete"
