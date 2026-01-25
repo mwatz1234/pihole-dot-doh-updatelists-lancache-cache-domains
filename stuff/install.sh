@@ -9,8 +9,8 @@ set -ex  # Print commands and exit on first failure
 case "$TARGETPLATFORM" in
   linux/amd64|x86_64) DNSPROXY_ARCH="amd64" ;;
   linux/arm64|aarch64) DNSPROXY_ARCH="arm64" ;;
-  linux/arm/v7|armv7l) DNSPROXY_ARCH="armv7" ;;
-  linux/arm/v6|armv6l) DNSPROXY_ARCH="armv6" ;;
+  linux/arm/v7|armv7l) DNSPROXY_ARCH="arm_7" ;;
+  linux/arm/v6|armv6l) DNSPROXY_ARCH="arm_6" ;;
   linux/386|i386) DNSPROXY_ARCH="386" ;;
   *)
     echo "Unsupported platform: $TARGETPLATFORM"
