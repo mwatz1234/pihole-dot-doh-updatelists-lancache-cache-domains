@@ -18,6 +18,7 @@ RUN apk add --no-cache \
         git \
         sudo \
         nano \
+        dcron \
         php-cli \
         php-curl \
         php-intl \
