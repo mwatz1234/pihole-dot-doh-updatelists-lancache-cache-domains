@@ -43,17 +43,57 @@ DNSPROXY_VERSION_NO_V=${DNSPROXY_VERSION#v}
 # Correct download URL
 DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-${DNSPROXY_VERSION_NO_V}.tar.gz"
 echo "Downloading $DNSPROXY_URL"
-curl -sL "$DNSPROXY_URL" -o /tmp/dnsproxy.tar.gz
+
+# Try multiple download methods with retries
+DOWNLOAD_SUCCESS=false
+for attempt in 1 2 3; do
+    echo "Download attempt $attempt of 3..."
+    
+    # Try wget first (more reliable with GitHub releases)
+    if command -v wget >/dev/null 2>&1; then
+        wget -q --timeout=30 --tries=2 -O /tmp/dnsproxy.tar.gz "$DNSPROXY_URL" && DOWNLOAD_SUCCESS=true && break
+    fi
+    
+    # Fallback to curl with explicit flags
+    if ! $DOWNLOAD_SUCCESS; then
+        curl -L --retry 2 --retry-delay 2 --connect-timeout 30 --max-time 60 -o /tmp/dnsproxy.tar.gz "$DNSPROXY_URL" && DOWNLOAD_SUCCESS=true && break
+    fi
+    
+    [ $attempt -lt 3 ] && sleep 2
+done
+
+if ! $DOWNLOAD_SUCCESS; then
+    echo "ERROR: Failed to download dnsproxy after 3 attempts"
+    exit 1
+fi
 
 if [ ! -f "/tmp/dnsproxy.tar.gz" ]; then
-    echo "dnsproxy tarball missing!"
+    echo "ERROR: dnsproxy tarball missing!"
+    exit 1
+fi
+
+# Verify file size (should be several MB, not an error page)
+FILE_SIZE=$(stat -c%s "/tmp/dnsproxy.tar.gz" 2>/dev/null || stat -f%z "/tmp/dnsproxy.tar.gz" 2>/dev/null || echo "0")
+if [ "$FILE_SIZE" -lt 100000 ]; then
+    echo "ERROR: Downloaded file is too small ($FILE_SIZE bytes), likely an error page"
+    head -n 20 /tmp/dnsproxy.tar.gz
+    exit 1
+fi
+
+# Verify it's a valid tar.gz file
+if ! tar -tzf /tmp/dnsproxy.tar.gz > /dev/null 2>&1; then
+    echo "ERROR: Downloaded file is not a valid tar.gz archive"
+    file /tmp/dnsproxy.tar.gz || true
+    head -n 10 /tmp/dnsproxy.tar.gz
     exit 1
 fi
 
 # Extract tarball (tarballs contain a flat 'dnsproxy' binary)
+echo "Extracting dnsproxy..."
 tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
 cp /tmp/dnsproxy /usr/local/bin/dnsproxy
 chmod +x /usr/local/bin/dnsproxy
+echo "dnsproxy installed successfully"
 
 ########################################
 # Default dnsproxy config
