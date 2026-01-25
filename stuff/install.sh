@@ -160,15 +160,11 @@ chmod +x /usr/local/bin/_cachedomainsonboot.sh
 mkdir -p /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d/_cachedomainsonboot
 
-# Cron job for cache-domains updates
-if [ ! -f "/etc/cron.d/cache-domains" ]; then
-cat << 'EOF' > /etc/cron.d/cache-domains
-# cache-domains Updater by mwatz1234
-# https://github.com/mwatz1234/pihole-dot-doh-updatelists-lancache-cache-domains
-#30 4 * * * root /usr/local/bin/lancache-dns-updates.sh
-EOF
-# Randomize minute
-sed "s/#30 /$((1 + RANDOM % 58)) /" -i /etc/cron.d/cache-domains
+# Cron job for cache-domains updates (Alpine style)
+if ! grep -q 'lancache-dns-updates.sh' /etc/crontabs/root 2>/dev/null; then
+    # Randomize minute for the cron job
+    RANDOM_MINUTE=$((1 + RANDOM % 58))
+    echo "${RANDOM_MINUTE} 4 * * * /usr/local/bin/lancache-dns-updates.sh" >> /etc/crontabs/root
 fi
 
 echo "dnsproxy + cache-domains installation complete"
