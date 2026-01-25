@@ -68,10 +68,19 @@ if ! tar -tzf /tmp/dnsproxy.tar.gz > /dev/null 2>&1; then
     exit 1
 fi
 
-# Extract tarball (tarballs contain a flat 'dnsproxy' binary)
+# Extract tarball and find the binary
 echo "Extracting dnsproxy..."
 tar -xzf /tmp/dnsproxy.tar.gz -C /tmp
-cp /tmp/dnsproxy /usr/local/bin/dnsproxy
+
+# Find and copy the dnsproxy binary (it may be in a subdirectory)
+DNSPROXY_BIN=$(find /tmp -name "dnsproxy" -type f | head -n 1)
+if [ -z "$DNSPROXY_BIN" ]; then
+    echo "ERROR: dnsproxy binary not found in archive"
+    ls -la /tmp/
+    exit 1
+fi
+
+cp "$DNSPROXY_BIN" /usr/local/bin/dnsproxy
 chmod +x /usr/local/bin/dnsproxy
 echo "dnsproxy installed successfully"
 
