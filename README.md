@@ -1,7 +1,7 @@
 # Pihole with dot, doh, updatelists, and cache domains for lancache
 Official pihole docker with DoT (DNS over TLS), DoH (DNS over HTTPS), jacklul/pihole-updatelists, and uklans/cache-domains configured to check and update daily if needed. 
 
-Multi-arch image built for both Raspberry Pi (arm64, arm32/v7, arm32/v6) and amd64.
+Multi-arch image built for amd64, 386, arm64, arm/v7, and arm/v6.
 
 ## Usage:
 For docker parameters, refer to [official pihole docker readme](https://github.com/pi-hole/pi-hole). Below is an docker compose example.
@@ -12,7 +12,7 @@ version: '3.8'
 services:
   pihole:
     container_name: pihole
-    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain::latest
+    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain:latest
     hostname: pihole
     domainname: pihole.local
     ports:
@@ -28,15 +28,69 @@ services:
       - WEBPASSWORD=<Password>
       - PIHOLE_DNS_=127.0.0.1#5054
       - DNSSEC=true
+      # pihole-updatelists configuration (optional - can also use config file)
+      - BLOCKLISTS_URL=https://v.firebog.net/hosts/lists.php?type=tick
+      - REGEX_BLACKLIST_URL=https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list
     volumes:
       - './etc/pihole:/etc/pihole/:rw'
       - './etc/dnsmasq:/etc/dnsmasq.d/:rw'
       - './etc/config:/config/:rw'
-      - './etc/updatelists:/etc/pihole-updatelists/:rw'
-      - './etc/lancache/config.json:/etc/cache-domains/config/config.json'
+      - './etc/updatelists/pihole-updatelists.conf:/etc/pihole-updatelists.conf:rw'
+      - './etc/lancache/config.json:/etc/cache-domains/config/config.json:rw'
     restart: unless-stopped
 ```
+
+### Configuration Files:
+
+**pihole-updatelists.conf** (./etc/updatelists/pihole-updatelists.conf):
+```conf
+; Pi-hole's Lists Updater by Jack'lul
+; https://github.com/jacklul/pihole-updatelists
+; For a full list of available variables please see the readme.
+
+; Remote list URL containing list of blocklists to import
+; URLs to single lists are not supported here!
+BLOCKLISTS_URL="https://v.firebog.net/hosts/lists.php?type=tick"
+
+; Remote list URL containing list of allowlists to import
+; URLs to single lists are not supported here!
+ALLOWLISTS_URL=""
+
+; Remote list URL containing exact domains to whitelist
+; This is specifically for handcrafted lists only, do not use regular allowlists here!
+WHITELIST_URL=""
+
+; Remote list URL containing regex rules for whitelisting
+REGEX_WHITELIST_URL=""
+
+; Remote list URL containing exact domains to blacklist
+; This is specifically for handcrafted lists only, do not use regular blocklists here!
+BLACKLIST_URL=""
+
+; Remote list URL containing regex rules for blacklisting
+REGEX_BLACKLIST_URL="https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list"
+```
+
+**lancache config.json** (./etc/lancache/config.json):
+```json
+{
+  "ips": {
+    "generic": "10.20.30.40"
+  },
+  "cache_domains": {
+    "default": "generic"
+  }
+}
+```
+Replace `10.20.30.40` with your LanCache server IP.
+
 ### Notes:
+* **Pi-hole Updatelists**
+  * Configure via environment variables (shown above) OR mount a config file
+  * Environment variables: `BLOCKLISTS_URL`, `ALLOWLISTS_URL`, `WHITELIST_URL`, `REGEX_WHITELIST_URL`, `BLACKLIST_URL`, `REGEX_BLACKLIST_URL`
+  * Config file method: Mount `pihole-updatelists.conf` to `/etc/pihole-updatelists.conf`
+  * Recommended lists shown in example above (Firebog tick lists + mmotti regex)
+  * Runs automatically on a schedule (configurable via `CRONTAB_STRING` env var)
 * Lancache config
   * Create the lancache folder and config.json before starting the container.
   * This container points Pi-hole to your already configured Lancache server for configured CDNs.
