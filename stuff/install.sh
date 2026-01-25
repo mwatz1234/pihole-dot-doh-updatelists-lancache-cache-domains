@@ -40,8 +40,8 @@ echo "Latest stable dnsproxy release: $DNSPROXY_VERSION"
 # Strip leading 'v' for the filename
 DNSPROXY_VERSION_NO_V=${DNSPROXY_VERSION#v}
 
-# Correct download URL
-DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-${DNSPROXY_VERSION_NO_V}.tar.gz"
+# Correct download URL - dnsproxy uses format: dnsproxy-linux-amd64-v0.78.2.tar.gz (with 'v' prefix)
+DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-${DNSPROXY_VERSION}.tar.gz"
 echo "Downloading $DNSPROXY_URL"
 
 # Download with wget (following redirects)
