@@ -89,7 +89,9 @@ if [ -f /temp/dnsproxy.yml ]; then
     cp -n /temp/dnsproxy.yml /config/dnsproxy.yml
 else
     cat << 'EOF' > /config/dnsproxy.yml
-bind-address: 0.0.0.0:5053
+listen_addresses:
+  - 127.0.0.1
+port: 5054
 upstream:
   - tls://1.1.1.1
   - tls://1.0.0.1
