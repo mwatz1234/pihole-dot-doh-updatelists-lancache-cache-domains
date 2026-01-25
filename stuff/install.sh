@@ -182,6 +182,12 @@ EOF
 
 chmod +x /usr/local/bin/_cachedomainsonboot.sh
 
+# Copy lancache update script
+if [ -f /temp/lancache-dns-updates.sh ]; then
+    cp /temp/lancache-dns-updates.sh /usr/local/bin/lancache-dns-updates.sh
+    chmod +x /usr/local/bin/lancache-dns-updates.sh
+fi
+
 # Post-FTL dependency
 mkdir -p /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d
 echo "" > /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d/_cachedomainsonboot
