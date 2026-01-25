@@ -24,11 +24,8 @@ echo "Detected architecture: $DNSPROXY_ARCH"
 # Install latest stable dnsproxy
 ########################################
 echo "Fetching latest stable dnsproxy release..."
-DNSPROXY_VERSION=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-  https://api.github.com/repos/AdguardTeam/dnsproxy/releases \
-  | grep -E '"tag_name": "v[0-9]+\.[0-9]+\.[0-9]+"' \
-  | head -n 1 \
-  | grep -Po 'v[0-9]+\.[0-9]+\.[0-9]+')
+DNSPROXY_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/dnsproxy/releases/latest \
+  | grep -Po '"tag_name": *"\K[^"]+')
 
 if [ -z "$DNSPROXY_VERSION" ]; then
     echo "Failed to detect latest dnsproxy release"
