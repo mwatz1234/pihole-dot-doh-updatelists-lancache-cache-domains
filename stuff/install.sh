@@ -44,28 +44,8 @@ DNSPROXY_VERSION_NO_V=${DNSPROXY_VERSION#v}
 DNSPROXY_URL="https://github.com/AdguardTeam/dnsproxy/releases/download/${DNSPROXY_VERSION}/dnsproxy-linux-${DNSPROXY_ARCH}-${DNSPROXY_VERSION_NO_V}.tar.gz"
 echo "Downloading $DNSPROXY_URL"
 
-# Try multiple download methods with retries
-DOWNLOAD_SUCCESS=false
-for attempt in 1 2 3; do
-    echo "Download attempt $attempt of 3..."
-    
-    # Try wget first (more reliable with GitHub releases)
-    if command -v wget >/dev/null 2>&1; then
-        wget -q --timeout=30 --tries=2 -O /tmp/dnsproxy.tar.gz "$DNSPROXY_URL" && DOWNLOAD_SUCCESS=true && break
-    fi
-    
-    # Fallback to curl with explicit flags
-    if ! $DOWNLOAD_SUCCESS; then
-        curl -L --retry 2 --retry-delay 2 --connect-timeout 30 --max-time 60 -o /tmp/dnsproxy.tar.gz "$DNSPROXY_URL" && DOWNLOAD_SUCCESS=true && break
-    fi
-    
-    [ $attempt -lt 3 ] && sleep 2
-done
-
-if ! $DOWNLOAD_SUCCESS; then
-    echo "ERROR: Failed to download dnsproxy after 3 attempts"
-    exit 1
-fi
+# Download with wget (following redirects)
+wget -O /tmp/dnsproxy.tar.gz "$DNSPROXY_URL"
 
 if [ ! -f "/tmp/dnsproxy.tar.gz" ]; then
     echo "ERROR: dnsproxy tarball missing!"
