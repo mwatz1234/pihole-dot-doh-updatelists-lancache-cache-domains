@@ -16,33 +16,52 @@ services:
     hostname: pihole
     domainname: pihole.local
     ports:
-      - "443:443/tcp"
       - "53:53/tcp"
       - "53:53/udp"
       - "80:80/tcp"
-      - "853:853/tcp"
-      - "853:853/udp"
+      - "443:443/tcp"
     environment:
-      - FTLCONF_LOCAL_IPV4=<IP of host>
       - TZ=America/Los_Angeles
-      - WEBPASSWORD=<Password>
-      - PIHOLE_DNS_=127.0.0.1#5054
-      - DNSSEC=true
+      - FTLCONF_webserver_api_password=<Password>
+      - FTLCONF_dns_upstreams=127.0.0.1#5054
+      - FTLCONF_dns_listeningMode=all
+      # Optional Pi-hole settings
+      #- FTLCONF_LOCAL_IPV4=192.168.1.10  # Set to your Pi-hole server's IP
+      #- FTLCONF_dns_dnssec=true          # Enable DNSSEC validation
       # pihole-updatelists configuration (optional - can also use config file)
       - BLOCKLISTS_URL=https://v.firebog.net/hosts/lists.php?type=tick
       - REGEX_BLACKLIST_URL=https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list
+      #- CRONTAB_STRING=25 2 * * 6
     volumes:
-      - './etc/pihole:/etc/pihole/:rw'
-      - './etc/dnsmasq:/etc/dnsmasq.d/:rw'
-      - './etc/config:/config/:rw'
-      - './etc/updatelists/pihole-updatelists.conf:/etc/pihole-updatelists.conf:rw'
-      - './etc/lancache/config.json:/etc/cache-domains/config/config.json:rw'
+      - './etc-pihole:/etc/pihole'
+      - './etc-dnsmasq.d:/etc/dnsmasq.d'
+      - './config:/config'
+      - './cache-domains:/etc/cache-domains'
+      - './pihole-updatelists:/etc/pihole-updatelists'
+    cap_add:
+      - NET_ADMIN   # Required for proper network operations (recommended)
+      - SYS_NICE    # Optional: Gives Pi-hole more processing time
     restart: unless-stopped
 ```
 
 ### Configuration Files:
 
-**pihole-updatelists.conf** (./etc/updatelists/pihole-updatelists.conf):
+**dnsproxy.yml** (./config/dnsproxy.yml):
+```yaml
+listen-addrs:
+  - 127.0.0.1
+listen-ports:
+  - 5054
+upstream:
+  - tls://1.1.1.1
+  - tls://1.0.0.1
+  - https://cloudflare-dns.com/dns-query
+cache: true
+timeout: 10s
+```
+Changes require **container restart**.
+
+**pihole-updatelists.conf** (./pihole-updatelists/pihole-updatelists.conf):
 ```conf
 ; Pi-hole's Lists Updater by Jack'lul
 ; https://github.com/jacklul/pihole-updatelists
@@ -70,8 +89,12 @@ BLACKLIST_URL=""
 ; Remote list URL containing regex rules for blacklisting
 REGEX_BLACKLIST_URL="https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list"
 ```
+Changes take effect:
+- **Automatically** on container start/restart (waits for FTL to be ready)
+- On scheduled cron run (default: 3-4 AM Saturday)
+- Manually: `docker exec pihole pihole-updatelists`
 
-**lancache config.json** (./etc/lancache/config.json):
+**lancache config.json** (./cache-domains/config/config.json):
 ```json
 {
   "ips": {
@@ -82,21 +105,33 @@ REGEX_BLACKLIST_URL="https://raw.githubusercontent.com/mmotti/pihole-regex/maste
   }
 }
 ```
-Replace `10.20.30.40` with your LanCache server IP.
+Changes take effect:
+- **Automatically** on container start/restart (waits for FTL, then reloads DNS)
+- Manually: `docker exec pihole bash /usr/local/bin/_cachedomainsonboot.sh`
 
 ### Notes:
+* **DNSProxy (DoT/DoH)**
+  * Config: `./config/dnsproxy.yml`
+  * Changes require **container restart**
+  * Runs on 127.0.0.1:5054 inside container
+  * Supports DoT and DoH upstreams (Cloudflare, Google, Quad9, etc.)
 * **Pi-hole Updatelists**
-  * Configure via environment variables (shown above) OR mount a config file
+  * Configure via **environment variables** (recommended) OR mount config directory
   * Environment variables: `BLOCKLISTS_URL`, `ALLOWLISTS_URL`, `WHITELIST_URL`, `REGEX_WHITELIST_URL`, `BLACKLIST_URL`, `REGEX_BLACKLIST_URL`
-  * Config file method: Mount `pihole-updatelists.conf` to `/etc/pihole-updatelists.conf`
+  * Config file: `./pihole-updatelists/pihole-updatelists.conf` (if not using env vars)
   * Recommended lists shown in example above (Firebog tick lists + mmotti regex)
-  * Runs automatically on a schedule (configurable via `CRONTAB_STRING` env var)
-* Lancache config
-  * Create the lancache folder and config.json before starting the container.
-  * This container points Pi-hole to your already configured Lancache server for configured CDNs.
-  * Example config: stuff/config.json
-* Encrypted DNS
-  * dnsproxy runs inside the container on 127.0.0.1#5054.
+  * **Runs automatically on container start/restart** (waits for FTL readiness)
+  * Also runs via cron (default: 3-4 AM Saturday, configurable via `CRONTAB_STRING` env var)
+  * Manual run: `docker exec pihole pihole-updatelists`
+* **Lancache (Cache Domains)**
+  * Config: `./cache-domains/config/config.json`
+  * Points Pi-hole to your Lancache server for gaming CDNs
+  * Example config: [stuff/config.json](stuff/config.json)
+  * **Runs automatically on container start/restart** (clones/updates repo, generates configs, waits for FTL, then reloads DNS)
+  * **Also runs daily via cron** at random minute during 4:XX AM to check for upstream updates
+  * Manual run: `docker exec pihole bash /usr/local/bin/_cachedomainsonboot.sh`
+  * On first start: clones uklans/cache-domains repo and generates ~26 dnsmasq configs
+  * On restart: checks for upstream changes and regenerates if needed54.
   * Supports both DoT (TLS) and DoH (HTTPS) upstreams.
   * Cloudflare profiles included:
     * Default → 1.1.1.1 / 1.0.0.1
@@ -109,9 +144,12 @@ Replace `10.20.30.40` with your LanCache server IP.
   * Pi-hole will automatically forward all queries to the DNSproxy service.
   * No need to set separate DoT/DoH services; dnsproxy handles both.
 * Cache Domains / Lancache
-  * _cachedomainsonboot ensures that cache-domains are copied and converted to dnsmasq configs on startup.
-  * lancache-dns-updates.sh runs daily via cron to pull updates from uklans/cache-domains.
-  * Idempotent: running multiple times does not break configs or overwrite manually adjusted files.
+  * `_cachedomainsonboot.sh` runs automatically on every container start/restart
+  * Clones uklans/cache-domains repo (first start) or checks for updates (restart)
+  * Generates dnsmasq configs for ~26 gaming CDNs (Steam, Epic, Origin, Xbox, etc.)
+  * Waits for Pi-hole FTL to be ready, then runs `pihole reloaddns` to apply changes
+  * `lancache-dns-updates.sh` runs daily via cron (random minute at 4:XX AM) to check for upstream CDN list updates
+  * Idempotent: running multiple times does not break configs
 * Volumes
   * /config → for dnsproxy config and other persistent config files
   * /etc/pihole → Pi-hole data
