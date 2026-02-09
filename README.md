@@ -8,9 +8,7 @@ Multi-arch image built for amd64, 386, arm64, arm/v7, and arm/v6.
 ## Usage:
 For docker parameters, refer to [official pihole docker readme](https://github.com/pi-hole/pi-hole).
 
-### Option 1: Using Named Volumes (Recommended - No Manual Setup Required)
-
-Docker automatically creates and manages these volumes with correct permissions:
+### Docker Compose Setup
 
 ```yaml
 version: '3.8'
@@ -18,98 +16,7 @@ version: '3.8'
 services:
   pihole:
     container_name: pihole
-    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain:latest
-    hostname: pihole
-    domainname: pihole.local
-    ports:
-      - "53:53/tcp"
-      - "53:53/udp"
-      - "80:80/tcp"
-      - "443:443/tcp"
-    environment:
-      - TZ=America/Los_Angeles
-      - FTLCONF_webserver_api_password=<Password>
-      - FTLCONF_dns_upstreams=127.0.0.1#5054
-      - FTLCONF_dns_listeningMode=all
-      # Optional Pi-hole settings
-      #- FTLCONF_LOCAL_IPV4=192.168.1.10  # Set to your Pi-hole server's IP
-      #- FTLCONF_dns_dnssec=true          # Enable DNSSEC validation
-      # pihole-updatelists configuration - automatic blocklist/whitelist management
-      # Runs on container start and via cron (default: 3-4 AM Saturday)
-      # All variables accept multiple URLs separated by spaces
-      # BLOCKLISTS_URL: Remote list URLs containing lists of blocklists (collection lists only, not single blocklists)
-      - BLOCKLISTS_URL=https://v.firebog.net/hosts/lists.php?type=tick https://www.github.developerdan.com/hosts/lists/ads-and-tracking-extended.txt
-      # WHITELIST_URL: Exact domains to whitelist (handcrafted lists for common false positives)
-      - WHITELIST_URL=https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/whitelist.txt https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/referral-sites.txt https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/optional-list.txt https://raw.githubusercontent.com/mmotti/pihole-regex/master/whitelist.list
-      # REGEX_BLACKLIST_URL: Regex patterns for advanced blocking
-      - REGEX_BLACKLIST_URL=https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list
-      # Other available variables (uncomment if needed):
-      # ALLOWLISTS_URL: Remote list URLs containing lists of allowlists (collection lists only)
-      # BLACKLIST_URL: Exact domains to blacklist (handcrafted lists - plain domain format, not hosts files)
-      # REGEX_WHITELIST_URL: Regex patterns for whitelisting
-      # CRONTAB_STRING: Custom cron schedule (default: random time 3-4 AM Saturday)
-    volumes:
-      - pihole_data:/etc/pihole
-      - pihole_dnsmasq:/etc/dnsmasq.d
-      - pihole_config:/config
-      - pihole_cache_domains:/etc/cache-domains
-    cap_add:
-      - NET_ADMIN
-      - SYS_NICE
-      - NET_BIND_SERVICE
-      - NET_RAW
-      - CHOWN
-    restart: unless-stopped
-
-volumes:
-  pihole_data:
-  pihole_dnsmasq:
-  pihole_config:
-  pihole_cache_domains:
-```
-
-**Just run:** `docker-compose up -d` - No manual directory creation needed!
-
-**Where are the volumes stored?**
-- Named volumes are stored in Docker's managed location (not in your current directory)
-- Linux: `/var/lib/docker/volumes/`
-- Windows/Mac: Inside Docker Desktop's VM
-- Volume names will be prefixed with your directory name (e.g., `pihole_pihole_data`)
-- List volumes: `docker volume ls`
-- Inspect location: `docker volume inspect pihole_pihole_data`
-
-**To access config files:**
-```bash
-# Edit dnsproxy config
-docker cp pihole:/config/dnsproxy.yml ./dnsproxy.yml
-# Edit and copy back
-docker cp ./dnsproxy.yml pihole:/config/dnsproxy.yml
-docker restart pihole
-
-# Or use docker exec
-docker exec -it pihole nano /config/dnsproxy.yml
-```
-
-**Backup/Restore named volumes:**
-```bash
-# Backup to tar file
-docker run --rm -v pihole_pihole_data:/data -v $(pwd):/backup alpine tar czf /backup/pihole-backup.tar.gz /data
-
-# Restore from tar file
-docker run --rm -v pihole_pihole_data:/data -v $(pwd):/backup alpine tar xzf /backup/pihole-backup.tar.gz -C /
-```
-
-### Option 2: Using Bind Mounts (For Direct File Access)
-
-If you prefer direct access to config files on your host:
-
-```yaml
-version: '3.8'
-
-services:
-  pihole:
-    container_name: pihole
-    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain:latest
+    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domains:latest
     hostname: pihole
     domainname: pihole.local
     ports:
@@ -146,43 +53,28 @@ services:
       - './cache-domains:/etc/cache-domains'
     cap_add:
       - NET_ADMIN
-      - SYS_NICE
-      - NET_BIND_SERVICE
-      - NET_RAW
-      - CHOWN
     restart: unless-stopped
 ```
 
-**⚠️ IMPORTANT - Run BEFORE first start:**
+**✅ Ready to go!** Just run: `docker-compose up -d`
+
+**Optional - Pre-create directories (only if you want to avoid permission warnings):**
 ```bash
 # Create directories
 mkdir -p ./etc-pihole ./etc-dnsmasq.d ./config ./cache-domains/config
 
 # Set ownership to UID/GID 1000 (what the container uses)
 sudo chown -R 1000:1000 ./etc-pihole ./etc-dnsmasq.d ./config ./cache-domains
-
-# Now start the container
-docker-compose up -d
 ```
 
-**Why this is needed:** If you don't create directories first, Docker creates them as root, causing permission errors. This applies to **all platforms** including Raspberry Pi, Linux, Windows, and Mac.
+**Note:** The container automatically initializes default config files if they don't exist:
+- `/config/dnsproxy.yml` - Created from defaults on first start
+- `/etc/cache-domains/config/config.json` - Created from defaults on first start
+
+**Editing config files:**
+Edit files directly on your host system in the directories you created (e.g., `./config/dnsproxy.yml`, `./cache-domains/config/config.json`).
 
 ### Configuration Files:
-
-**To edit configuration files when using named volumes:**
-```bash
-# Copy config out, edit, and copy back
-docker cp pihole:/config/dnsproxy.yml ./dnsproxy.yml
-nano dnsproxy.yml
-docker cp ./dnsproxy.yml pihole:/config/dnsproxy.yml
-docker restart pihole
-
-# Or edit directly in container
-docker exec -it pihole nano /config/dnsproxy.yml
-docker restart pihole
-```
-
-**When using bind mounts** - edit files directly on your host system.
 
 ---
 
@@ -311,20 +203,17 @@ Changes take effect:
 
 ## Troubleshooting
 
-### Permission Errors on First Start
+### Permission Errors (Rare - mostly affects custom UID/GID setups)
 
-If you see errors like `Permission denied`, `unable to open database`, or `Operation not permitted`:
+The container automatically creates config files with correct permissions. If you still see errors like `Permission denied`, `unable to open database`, or `Operation not permitted`:
 
 1. **Stop the container:**
    ```bash
    docker-compose down
    ```
 
-2. **Fix volume permissions:**
+2. **Fix existing directory permissions:**
    ```bash
-   # Create directories if they don't exist
-   mkdir -p ./etc-pihole ./etc-dnsmasq.d ./config ./cache-domains/config
-   
    # Set ownership to match container (default UID:GID is 1000:1000)
    sudo chown -R 1000:1000 ./etc-pihole ./etc-dnsmasq.d
    sudo chown -R 1000:1000 ./config ./cache-domains
