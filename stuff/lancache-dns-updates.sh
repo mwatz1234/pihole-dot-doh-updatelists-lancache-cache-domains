@@ -39,5 +39,6 @@ bash ./create-dnsmasq.sh > /dev/null 2>&1
 # Copy to Pi-hole
 cp -r "$TEMPDIR/scripts/output/dnsmasq/"*.conf /etc/dnsmasq.d/
 
-# Reload Pi-hole FTL
-pihole restartdns reload || killall -HUP pihole-FTL
+# Reload Pi-hole FTL (Pi-hole v6 command)
+echo "Reloading DNS to apply cache-domains updates..."
+pihole reloaddns
