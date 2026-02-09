@@ -57,70 +57,21 @@ RUN wget -O - https://raw.githubusercontent.com/jacklul/pihole-updatelists/maste
 RUN echo "$(date "+%d.%m.%Y %T") Built from ${FRM} with tag ${TAG}" >> /build_date.info
 
 #---------------------------------------
-# Custom entrypoint wrapper
+# Modify Pi-hole startup scripts
 #---------------------------------------
-RUN cat << 'EOF' > /usr/local/bin/docker-entrypoint-wrapper.sh
-#!/bin/bash
-# Initialize config files from defaults
-if [ ! -f /config/dnsproxy.yml ] && [ -f /usr/local/share/dnsproxy-defaults/dnsproxy.yml ]; then
-    echo "Initializing /config/dnsproxy.yml from defaults"
-    cp /usr/local/share/dnsproxy-defaults/dnsproxy.yml /config/dnsproxy.yml
+# Inject our initialization into start.sh (runs before FTL starts)
+RUN sed -i '/^\s*ftl_config/a\\n# Initialize dnsproxy and cache-domains configs\nif [ ! -f /config/dnsproxy.yml ] && [ -f /usr/local/share/dnsproxy-defaults/dnsproxy.yml ]; then\n    echo "  [i] Initializing /config/dnsproxy.yml from defaults"\n    cp /usr/local/share/dnsproxy-defaults/dnsproxy.yml /config/dnsproxy.yml\nfi\n\nif [ ! -f /etc/cache-domains/config/config.json ] && [ -f /usr/local/share/cache-domains-defaults/config.json ]; then\n    echo "  [i] Initializing /etc/cache-domains/config/config.json from defaults"\n    mkdir -p /etc/cache-domains/config\n    cp /usr/local/share/cache-domains-defaults/config.json /etc/cache-domains/config/config.json\nfi\n\n# Start DNSProxy (DoT/DoH) in background\necho "  [i] Starting DNSProxy on 127.0.0.1:5054"\n/usr/local/bin/dnsproxy --config-path=/config/dnsproxy.yml >/var/log/dnsproxy.log 2>&1 &' /usr/bin/start.sh
+
+# Inject cache-domains initialization into bash_functions.sh (runs after gravity)
+RUN sed -i '/^\s*pihole -g/a\\n# Initialize cache-domains after gravity\necho "  [i] Initializing cache-domains..."\nbash /usr/local/bin/_cachedomainsonboot.sh >/var/log/cache-domains-init.log 2>&1 &' /usr/bin/bash_functions.sh
+
+# Add cache-domains cron job to crontab.txt
+RUN if ! grep -q "lancache-dns-updates.sh" /crontab.txt 2>/dev/null; then \
+    RANDOM_MINUTE=$((1 + RANDOM % 58)); \
+    echo "${RANDOM_MINUTE} 4 * * * root PATH=\"/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\" /usr/local/bin/lancache-dns-updates.sh >/var/log/lancache-dns-updates-cron.log 2>&1" >> /crontab.txt; \
+    echo "Added cache-domains cron to /crontab.txt (04:${RANDOM_MINUTE})"; \
 fi
 
-if [ ! -f /etc/cache-domains/config/config.json ] && [ -f /usr/local/share/cache-domains-defaults/config.json ]; then
-    echo "Initializing /etc/cache-domains/config/config.json from defaults"
-    mkdir -p /etc/cache-domains/config
-    cp /usr/local/share/cache-domains-defaults/config.json /etc/cache-domains/config/config.json
-fi
-
-# Start dnsproxy in the background
-echo "Starting dnsproxy (DoT/DoH proxy on 127.0.0.1:5054)"
-/usr/local/bin/dnsproxy --config-path=/config/dnsproxy.yml &
-
-# Initialize cache-domains in the background
-echo "Initializing cache-domains..."
-bash /usr/local/bin/_cachedomainsonboot.sh &
-
-# Add cache-domains cron job after Pi-hole initializes crontab (in background)
-(
-  sleep 10  # Wait for Pi-hole to create its crontab
-  if ! grep -q 'lancache-dns-updates.sh' /etc/crontabs/root 2>/dev/null; then
-    RANDOM_MINUTE=$((1 + RANDOM % 58))
-    echo "${RANDOM_MINUTE} 4 * * * /usr/local/bin/lancache-dns-updates.sh >/var/log/lancache-dns-updates-cron.log 2>&1" >> /etc/crontabs/root
-    echo "Added cache-domains cron job to run daily at 04:${RANDOM_MINUTE}"
-  fi
-) &
-
-# Run pihole-updatelists after Pi-hole is ready (in background)
-(
-  echo "Waiting for Pi-hole FTL to be ready before running updatelists..."
-  max_attempts=60
-  attempt=0
-  
-  while [ $attempt -lt $max_attempts ]; do
-    if pihole status >/dev/null 2>&1; then
-      echo "Pi-hole FTL is ready! Running pihole-updatelists..."
-      pihole-updatelists.sh run 2>&1 | head -n 20
-      break
-    fi
-    attempt=$((attempt + 1))
-    sleep 2
-  done
-  
-  if [ $attempt -eq $max_attempts ]; then
-    echo "Warning: Pi-hole FTL did not become ready in time. Skipping updatelists."
-  fi
-) &
-
-# Call original pihole entrypoint
-exec /usr/bin/start.sh "$@"
-EOF
-RUN chmod +x /usr/local/bin/docker-entrypoint-wrapper.sh
-
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint-wrapper.sh"]
-
 #---------------------------------------
-# Entrypoint
-# Pi-hole already uses s6 overlay
-# Running as root - Pi-hole handles user switching internally
+# Use Pi-hole's default entrypoint
 #---------------------------------------
