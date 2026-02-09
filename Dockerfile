@@ -43,13 +43,15 @@ RUN chmod +x /temp/install.sh
 #---------------------------------------
 # Run installation (dnsproxy + cache-domains)
 #---------------------------------------
-RUN TARGETPLATFORM=${TARGETPLATFORM} /bin/bash /temp/install.sh \
-    && rm -rf /temp
+RUN TARGETPLATFORM=${TARGETPLATFORM} /bin/bash /temp/install.sh
 
 #---------------------------------------
 # Pi-hole updatelists (optional)
 #---------------------------------------
 RUN wget -O - https://raw.githubusercontent.com/jacklul/pihole-updatelists/master/install.sh | bash -s docker
+
+# Cleanup temp files
+RUN rm -rf /temp
 
 #---------------------------------------
 # Build info
