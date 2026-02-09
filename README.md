@@ -3,10 +3,16 @@ Official pihole docker with DoT (DNS over TLS), DoH (DNS over HTTPS), jacklul/pi
 
 Multi-arch image built for amd64, 386, arm64, arm/v7, and arm/v6.
 
-## Usage:
-For docker parameters, refer to [official pihole docker readme](https://github.com/pi-hole/pi-hole). Below is an docker compose example.
+**Uses the proven jacklul/pihole-updatelists approach** - modifies Pi-hole's startup scripts for maximum compatibility with Raspberry Pi and other platforms.
 
-```
+## Usage:
+For docker parameters, refer to [official pihole docker readme](https://github.com/pi-hole/pi-hole).
+
+### Option 1: Using Named Volumes (Recommended - No Manual Setup Required)
+
+Docker automatically creates and manages these volumes with correct permissions:
+
+```yaml
 version: '3.8'
 
 services:
@@ -28,25 +34,159 @@ services:
       # Optional Pi-hole settings
       #- FTLCONF_LOCAL_IPV4=192.168.1.10  # Set to your Pi-hole server's IP
       #- FTLCONF_dns_dnssec=true          # Enable DNSSEC validation
-      # pihole-updatelists configuration (optional - can also use config file)
-      - BLOCKLISTS_URL=https://v.firebog.net/hosts/lists.php?type=tick
+      # pihole-updatelists configuration - automatic blocklist/whitelist management
+      # Runs on container start and via cron (default: 3-4 AM Saturday)
+      # All variables accept multiple URLs separated by spaces
+      # BLOCKLISTS_URL: Remote list URLs containing lists of blocklists (collection lists only, not single blocklists)
+      - BLOCKLISTS_URL=https://v.firebog.net/hosts/lists.php?type=tick https://www.github.developerdan.com/hosts/lists/ads-and-tracking-extended.txt
+      # WHITELIST_URL: Exact domains to whitelist (handcrafted lists for common false positives)
+      - WHITELIST_URL=https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/whitelist.txt https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/referral-sites.txt https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/optional-list.txt https://raw.githubusercontent.com/mmotti/pihole-regex/master/whitelist.list
+      # REGEX_BLACKLIST_URL: Regex patterns for advanced blocking
       - REGEX_BLACKLIST_URL=https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list
-      #- CRONTAB_STRING=25 2 * * 6
+      # Other available variables (uncomment if needed):
+      # ALLOWLISTS_URL: Remote list URLs containing lists of allowlists (collection lists only)
+      # BLACKLIST_URL: Exact domains to blacklist (handcrafted lists - plain domain format, not hosts files)
+      # REGEX_WHITELIST_URL: Regex patterns for whitelisting
+      # CRONTAB_STRING: Custom cron schedule (default: random time 3-4 AM Saturday)
+    volumes:
+      - pihole_data:/etc/pihole
+      - pihole_dnsmasq:/etc/dnsmasq.d
+      - pihole_config:/config
+      - pihole_cache_domains:/etc/cache-domains
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - CHOWN
+    restart: unless-stopped
+
+volumes:
+  pihole_data:
+  pihole_dnsmasq:
+  pihole_config:
+  pihole_cache_domains:
+```
+
+**Just run:** `docker-compose up -d` - No manual directory creation needed!
+
+**Where are the volumes stored?**
+- Named volumes are stored in Docker's managed location (not in your current directory)
+- Linux: `/var/lib/docker/volumes/`
+- Windows/Mac: Inside Docker Desktop's VM
+- Volume names will be prefixed with your directory name (e.g., `pihole_pihole_data`)
+- List volumes: `docker volume ls`
+- Inspect location: `docker volume inspect pihole_pihole_data`
+
+**To access config files:**
+```bash
+# Edit dnsproxy config
+docker cp pihole:/config/dnsproxy.yml ./dnsproxy.yml
+# Edit and copy back
+docker cp ./dnsproxy.yml pihole:/config/dnsproxy.yml
+docker restart pihole
+
+# Or use docker exec
+docker exec -it pihole nano /config/dnsproxy.yml
+```
+
+**Backup/Restore named volumes:**
+```bash
+# Backup to tar file
+docker run --rm -v pihole_pihole_data:/data -v $(pwd):/backup alpine tar czf /backup/pihole-backup.tar.gz /data
+
+# Restore from tar file
+docker run --rm -v pihole_pihole_data:/data -v $(pwd):/backup alpine tar xzf /backup/pihole-backup.tar.gz -C /
+```
+
+### Option 2: Using Bind Mounts (For Direct File Access)
+
+If you prefer direct access to config files on your host:
+
+```yaml
+version: '3.8'
+
+services:
+  pihole:
+    container_name: pihole
+    image: mwatz/pihole-dot-dnsproxy-updatelists-lancache-cache-domain:latest
+    hostname: pihole
+    domainname: pihole.local
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"
+      - "443:443/tcp"
+    environment:
+      - TZ=America/Los_Angeles
+      - FTLCONF_webserver_api_password=<Password>
+      - FTLCONF_dns_upstreams=127.0.0.1#5054
+      - FTLCONF_dns_listeningMode=all
+      # Optional Pi-hole settings
+      #- FTLCONF_LOCAL_IPV4=192.168.1.10  # Set to your Pi-hole server's IP
+      #- FTLCONF_dns_dnssec=true          # Enable DNSSEC validation
+      # pihole-updatelists configuration - automatic blocklist/whitelist management
+      # Runs on container start and via cron (default: 3-4 AM Saturday)
+      # All variables accept multiple URLs separated by spaces
+      # BLOCKLISTS_URL: Remote list URLs containing lists of blocklists (collection lists only, not single blocklists)
+      - BLOCKLISTS_URL=https://v.firebog.net/hosts/lists.php?type=tick https://www.github.developerdan.com/hosts/lists/ads-and-tracking-extended.txt
+      # WHITELIST_URL: Exact domains to whitelist (handcrafted lists for common false positives)
+      - WHITELIST_URL=https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/whitelist.txt https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/referral-sites.txt https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/optional-list.txt https://raw.githubusercontent.com/mmotti/pihole-regex/master/whitelist.list
+      # REGEX_BLACKLIST_URL: Regex patterns for advanced blocking
+      - REGEX_BLACKLIST_URL=https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list
+      # Other available variables (uncomment if needed):
+      # ALLOWLISTS_URL: Remote list URLs containing lists of allowlists (collection lists only)
+      # BLACKLIST_URL: Exact domains to blacklist (handcrafted lists - plain domain format, not hosts files)
+      # REGEX_WHITELIST_URL: Regex patterns for whitelisting
+      # CRONTAB_STRING: Custom cron schedule (default: random time 3-4 AM Saturday)
     volumes:
       - './etc-pihole:/etc/pihole'
       - './etc-dnsmasq.d:/etc/dnsmasq.d'
       - './config:/config'
       - './cache-domains:/etc/cache-domains'
-      - './pihole-updatelists:/etc/pihole-updatelists'
     cap_add:
-      - NET_ADMIN   # Required for proper network operations (recommended)
-      - SYS_NICE    # Optional: Gives Pi-hole more processing time
+      - NET_ADMIN
+      - SYS_NICE
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - CHOWN
     restart: unless-stopped
 ```
 
+**⚠️ IMPORTANT - Run BEFORE first start:**
+```bash
+# Create directories
+mkdir -p ./etc-pihole ./etc-dnsmasq.d ./config ./cache-domains/config
+
+# Set ownership to UID/GID 1000 (what the container uses)
+sudo chown -R 1000:1000 ./etc-pihole ./etc-dnsmasq.d ./config ./cache-domains
+
+# Now start the container
+docker-compose up -d
+```
+
+**Why this is needed:** If you don't create directories first, Docker creates them as root, causing permission errors. This applies to **all platforms** including Raspberry Pi, Linux, Windows, and Mac.
+
 ### Configuration Files:
 
-**dnsproxy.yml** (./config/dnsproxy.yml):
+**To edit configuration files when using named volumes:**
+```bash
+# Copy config out, edit, and copy back
+docker cp pihole:/config/dnsproxy.yml ./dnsproxy.yml
+nano dnsproxy.yml
+docker cp ./dnsproxy.yml pihole:/config/dnsproxy.yml
+docker restart pihole
+
+# Or edit directly in container
+docker exec -it pihole nano /config/dnsproxy.yml
+docker restart pihole
+```
+
+**When using bind mounts** - edit files directly on your host system.
+
+---
+
+**dnsproxy.yml** (/config/dnsproxy.yml):
 ```yaml
 listen-addrs:
   - 127.0.0.1
@@ -69,7 +209,8 @@ Changes require **container restart**.
 
 ; Remote list URL containing list of blocklists to import
 ; URLs to single lists are not supported here!
-BLOCKLISTS_URL="https://v.firebog.net/hosts/lists.php?type=tick"
+BLOCKLISTS_URL="https://v.firebog.net/hosts/lists.php?type=tick
+https://www.github.developerdan.com/hosts/lists/ads-and-tracking-extended.txt"
 
 ; Remote list URL containing list of allowlists to import
 ; URLs to single lists are not supported here!
@@ -77,13 +218,17 @@ ALLOWLISTS_URL=""
 
 ; Remote list URL containing exact domains to whitelist
 ; This is specifically for handcrafted lists only, do not use regular allowlists here!
-WHITELIST_URL=""
+WHITELIST_URL="https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/whitelist.txt
+https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/referral-sites.txt
+https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/optional-list.txt
+https://raw.githubusercontent.com/mmotti/pihole-regex/master/whitelist.list"
 
 ; Remote list URL containing regex rules for whitelisting
 REGEX_WHITELIST_URL=""
 
 ; Remote list URL containing exact domains to blacklist
 ; This is specifically for handcrafted lists only, do not use regular blocklists here!
+; Must be plain domain format (one domain per line), NOT hosts file format
 BLACKLIST_URL=""
 
 ; Remote list URL containing regex rules for blacklisting
@@ -98,13 +243,15 @@ Changes take effect:
 ```json
 {
   "ips": {
-    "generic": "10.20.30.40"
+    "generic": "10.0.0.100"
   },
   "cache_domains": {
     "default": "generic"
   }
 }
 ```
+**⚠️ IMPORTANT:** Replace `10.0.0.100` with your actual Lancache server IP address!
+
 Changes take effect:
 - **Automatically** on container start/restart (waits for FTL, then reloads DNS)
 - Manually: `docker exec pihole bash /usr/local/bin/_cachedomainsonboot.sh`
@@ -116,25 +263,28 @@ Changes take effect:
   * Runs on 127.0.0.1:5054 inside container
   * Supports DoT and DoH upstreams (Cloudflare, Google, Quad9, etc.)
 * **Pi-hole Updatelists**
-  * Configure via **environment variables** (recommended) OR mount config directory
+  * Configure via **environment variables** (recommended) OR mount config file
   * Environment variables: `BLOCKLISTS_URL`, `ALLOWLISTS_URL`, `WHITELIST_URL`, `REGEX_WHITELIST_URL`, `BLACKLIST_URL`, `REGEX_BLACKLIST_URL`
   * Config file: `./pihole-updatelists/pihole-updatelists.conf` (if not using env vars)
-  * Recommended lists shown in example above (Firebog tick lists + mmotti regex)
+  * Example includes: Firebog tick lists, DeveloperDan tracking, AnudeepND whitelists, mmotti regex & whitelist, StevenBlack hosts
+  * Multiple URLs per variable: separate with spaces (env vars) or newlines (config file)
   * **Runs automatically on container start/restart** (waits for FTL readiness)
   * Also runs via cron (default: 3-4 AM Saturday, configurable via `CRONTAB_STRING` env var)
   * Manual run: `docker exec pihole pihole-updatelists`
 * **Lancache (Cache Domains)**
-  * Config: `./cache-domains/config/config.json`
-  * Points Pi-hole to your Lancache server for gaming CDNs
+  * Config: `./cache-domains/config/config.json` - **Set your Lancache server IP here!**
+  * Points Pi-hole to your Lancache server for gaming CDNs (Steam, Epic, Xbox, etc.)
+  * Generates ~26 dnsmasq config files in `/etc/dnsmasq.d/` (one per CDN service)
   * Example config: [stuff/config.json](stuff/config.json)
   * **Runs automatically on container start/restart** (clones/updates repo, generates configs, waits for FTL, then reloads DNS)
   * **Also runs daily via cron** at random minute during 4:XX AM to check for upstream updates
   * Manual run: `docker exec pihole bash /usr/local/bin/_cachedomainsonboot.sh`
   * On first start: clones uklans/cache-domains repo and generates ~26 dnsmasq configs
-  * On restart: checks for upstream changes and regenerates if needed54.
-  * Supports both DoT (TLS) and DoH (HTTPS) upstreams.
-  * Cloudflare profiles included:
-    * Default → 1.1.1.1 / 1.0.0.1
+  * On restart: checks for upstream changes and regenerates if needed
+  * Verify configs: `docker exec pihole ls /etc/dnsmasq.d/` (should show steam.conf, epicgames.conf, etc.)
+* **DNSProxy (DoT/DoH encryption)**
+  * Config: `./config/dnsproxy.yml`
+  * Runs on 127.0.0.1:5054 inside container
     * Family → 1.1.1.3 / 1.0.0.3 (blocks adult content)
     * Malware / Security → 1.1.1.2 / 1.0.0.2
     * DoH equivalents → https://cloudflare-dns.com/dns-query, https://family.cloudflare-dns.com/dns-query, https://security.cloudflare-dns.com/dns-query
@@ -154,11 +304,82 @@ Changes take effect:
   * /config → for dnsproxy config and other persistent config files
   * /etc/pihole → Pi-hole data
   * /etc/dnsmasq.d → Pi-hole dnsmasq overrides
-  * /etc/pihole-updatelists → custom blocklists from jacklul/pihole-updatelists
+  * /etc/pihole-updatelists.conf → pihole-updatelists config file (can also use environment variables)
   * /etc/cache-domains/config/config.json → cache-domains configuration
 * Multi-arch support
   * Builds for amd64, arm64, arm32/v7, arm32/v6.
-* Credits
+
+## Troubleshooting
+
+### Permission Errors on First Start
+
+If you see errors like `Permission denied`, `unable to open database`, or `Operation not permitted`:
+
+1. **Stop the container:**
+   ```bash
+   docker-compose down
+   ```
+
+2. **Fix volume permissions:**
+   ```bash
+   # Create directories if they don't exist
+   mkdir -p ./etc-pihole ./etc-dnsmasq.d ./config ./cache-domains/config
+   
+   # Set ownership to match container (default UID:GID is 1000:1000)
+   sudo chown -R 1000:1000 ./etc-pihole ./etc-dnsmasq.d
+   sudo chown -R 1000:1000 ./config ./cache-domains
+   ```
+
+3. **Or use your own UID/GID** by adding to environment variables:
+   ```yaml
+   environment:
+     - PIHOLE_UID=1001  # Your user's UID (check with: id -u)
+     - PIHOLE_GID=1001  # Your user's GID (check with: id -g)
+   ```
+
+4. **Start the container:**
+   ```bash
+   docker-compose up -d
+   ```
+
+### "Unable to set capabilities for pihole-FTL" / Container Crash-Looping
+
+If you see `ERROR: Unable to set capabilities for pihole-FTL` and the container keeps restarting, this is usually a **non-fatal warning** from Pi-hole's base image. The container should still work.
+
+**If the container actually crashes**, try adding `privileged: true`:
+
+```yaml
+services:
+  pihole:
+    privileged: true
+    # ... rest of config
+```
+
+**Note:** This image uses the same startup approach as jacklul/pihole-updatelists and should work on all platforms including Raspberry Pi without additional configuration.
+
+### "No DNS upstream set in environment" Error
+
+If you see this despite setting `FTLCONF_dns_upstreams`, the environment variable format might be wrong.
+
+**Fix:** Ensure no quotes around the value in your compose file:
+```yaml
+environment:
+  FTLCONF_dns_upstreams: 127.0.0.1#5054  # Correct (no quotes)
+  # NOT: FTLCONF_dns_upstreams: '127.0.0.1#5054'  # Wrong for lists
+```
+
+### DNS Not Working
+
+- Check if DNSProxy is running: `docker exec pihole netstat -tuln | grep 5054`
+- Check if Pi-hole FTL is running: `docker exec pihole pihole status`
+- Verify upstream setting: `docker exec pihole pihole-FTL --config dns.upstreams`
+
+### Container Keeps Restarting
+
+- Check logs: `docker logs pihole`
+- Ensure port 53 is not in use by another service: `sudo netstat -tulpn | grep :53`
+
+## Credits
   * Pi-hole base image: pihole/pihole:latest
   * dnsproxy (replaces Stubby/Cloudflared) by Adguard: github.com/AdguardTeam/dnsproxy
   * Pi-hole Updatelists: jacklul/pihole-updatelists
