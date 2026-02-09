@@ -82,42 +82,79 @@ chmod +x /usr/local/bin/dnsproxy
 echo "dnsproxy installed successfully"
 
 ########################################
-# Default dnsproxy config
+# Default dnsproxy config - Store template
 ########################################
-mkdir -p /config
+mkdir -p /usr/local/share/dnsproxy-defaults
 if [ -f /temp/dnsproxy.yml ]; then
-    cp -n /temp/dnsproxy.yml /config/dnsproxy.yml
+    cp /temp/dnsproxy.yml /usr/local/share/dnsproxy-defaults/dnsproxy.yml
 else
-    cat << 'EOF' > /config/dnsproxy.yml
-listen_addresses:
+    cat << 'EOF' > /usr/local/share/dnsproxy-defaults/dnsproxy.yml
+listen-addrs:
   - 127.0.0.1
-port: 5054
+listen-ports:
+  - 5054
 upstream:
   - tls://1.1.1.1
   - tls://1.0.0.1
-log-level: info
+cache: true
+timeout: 10s
 EOF
 fi
 
-########################################
-# s6 service for dnsproxy
-########################################
-mkdir -p /etc/services.d/dnsproxy
+# Copy default to /config if not exists (for first run)
+mkdir -p /config
+if [ ! -f /config/dnsproxy.yml ]; then
+    cp /usr/local/share/dnsproxy-defaults/dnsproxy.yml /config/dnsproxy.yml
+fi
 
-cat << 'EOF' > /etc/services.d/dnsproxy/run
-#!/bin/bash
-s6-echo "Starting dnsproxy (DNS-over-TLS + DoH fallback)"
-exec /usr/local/bin/dnsproxy --config-path=/config/dnsproxy.yml
+########################################
+# s6-overlay v3 service for dnsproxy
+########################################
+mkdir -p /etc/s6-overlay/s6-rc.d/dnsproxy
+echo "longrun" > /etc/s6-overlay/s6-rc.d/dnsproxy/type
+
+cat << 'EOF' > /etc/s6-overlay/s6-rc.d/dnsproxy/run
+#!/command/execlineb -P
+s6-echo "Starting dnsproxy (DNS-over-TLS + DoH)"
+/usr/local/bin/dnsproxy --config-path=/config/dnsproxy.yml
 EOF
 
-cat << 'EOF' > /etc/services.d/dnsproxy/finish
+chmod +x /etc/s6-overlay/s6-rc.d/dnsproxy/run
+
+# Add dnsproxy to user bundle so it starts automatically
+mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d
+touch /etc/s6-overlay/s6-rc.d/user/contents.d/dnsproxy
+
+########################################
+# Init script to copy default configs to volumes
+# Using s6-overlay v3 init scripts
+########################################
+mkdir -p /etc/s6-overlay/scripts
+
+cat << 'EOF' > /etc/s6-overlay/scripts/init-configs.sh
 #!/bin/bash
-s6-echo "Stopping dnsproxy"
-killall -9 dnsproxy || true
+# Copy default configs to mounted volumes if they don't exist
+if [ ! -f /config/dnsproxy.yml ] && [ -f /usr/local/share/dnsproxy-defaults/dnsproxy.yml ]; then
+    echo "Initializing /config/dnsproxy.yml from defaults"
+    cp /usr/local/share/dnsproxy-defaults/dnsproxy.yml /config/dnsproxy.yml
+fi
+
+if [ ! -f /etc/cache-domains/config/config.json ] && [ -f /usr/local/share/cache-domains-defaults/config.json ]; then
+    echo "Initializing /etc/cache-domains/config/config.json from defaults"
+    mkdir -p /etc/cache-domains/config
+    cp /usr/local/share/cache-domains-defaults/config.json /etc/cache-domains/config/config.json
+fi
 EOF
 
-chmod +x /etc/services.d/dnsproxy/run
-chmod +x /etc/services.d/dnsproxy/finish
+chmod +x /etc/s6-overlay/scripts/init-configs.sh
+
+########################################
+# Store default cache-domains config template
+########################################
+mkdir -p /usr/local/share/cache-domains-defaults
+if [ -f /temp/config.json ]; then
+    cp /temp/config.json /usr/local/share/cache-domains-defaults/config.json
+fi
 
 ########################################
 # Cleanup temporary files
@@ -168,9 +205,16 @@ mkdir -p /etc/cache-domains/scripts/
 cp "$WORKDIR/cache-domains/scripts/create-dnsmasq.sh" /etc/cache-domains/scripts/
 chmod +x /etc/cache-domains/scripts/create-dnsmasq.sh
 
-mkdir -p /etc/cache-domains/config
+# Store default cache-domains config as template
+mkdir -p /usr/local/share/cache-domains-defaults
 if [ -f /temp/config.json ]; then
-    cp -n /temp/config.json /etc/cache-domains/config/
+    cp /temp/config.json /usr/local/share/cache-domains-defaults/config.json
+fi
+
+# Initialize config if not exists
+mkdir -p /etc/cache-domains/config
+if [ ! -f /etc/cache-domains/config/config.json ] && [ -f /usr/local/share/cache-domains-defaults/config.json ]; then
+    cp /usr/local/share/cache-domains-defaults/config.json /etc/cache-domains/config/
 fi
 rm -f /etc/cache-domains/scripts/config.json
 ln -sf /etc/cache-domains/config/config.json /etc/cache-domains/scripts/config.json
@@ -179,10 +223,33 @@ cd /etc/cache-domains/scripts
 bash ./create-dnsmasq.sh > /dev/null 2>&1
 
 cp -r /etc/cache-domains/scripts/output/dnsmasq/*.conf /etc/dnsmasq.d/
-pihole restartdns reload || killall -HUP pihole-FTL
+
+# Wait for Pi-hole FTL to be ready before reloading
+echo "Waiting for Pi-hole FTL to be ready before reloading DNS..."
+max_attempts=60
+attempt=0
+
+while [ $attempt -lt $max_attempts ]; do
+    if pihole status >/dev/null 2>&1; then
+        echo "FTL is ready! Reloading DNS to apply cache-domains configs..."
+        pihole reloaddns
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 2
+done
+
+if [ $attempt -eq $max_attempts ]; then
+    echo "Warning: FTL did not become ready in time. Trying to reload anyway..."
+    pihole reloaddns || killall -HUP pihole-FTL
+fi
 EOF
 
 chmod +x /usr/local/bin/_cachedomainsonboot.sh
+
+# Add cache-domains to user bundle so it starts automatically
+mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d
+touch /etc/s6-overlay/s6-rc.d/user/contents.d/_cachedomainsonboot
 
 # Copy lancache update script
 if [ -f /temp/lancache-dns-updates.sh ]; then
@@ -190,15 +257,14 @@ if [ -f /temp/lancache-dns-updates.sh ]; then
     chmod +x /usr/local/bin/lancache-dns-updates.sh
 fi
 
-# Post-FTL dependency
-mkdir -p /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d
-echo "" > /etc/s6-overlay/s6-rc.d/_postFTL/dependencies.d/_cachedomainsonboot
-
 # Cron job for cache-domains updates (Alpine style)
+mkdir -p /etc/crontabs
+touch /etc/crontabs/root
 if ! grep -q 'lancache-dns-updates.sh' /etc/crontabs/root 2>/dev/null; then
     # Randomize minute for the cron job
     RANDOM_MINUTE=$((1 + RANDOM % 58))
-    echo "${RANDOM_MINUTE} 4 * * * /usr/local/bin/lancache-dns-updates.sh" >> /etc/crontabs/root
+    echo "${RANDOM_MINUTE} 4 * * * /usr/local/bin/lancache-dns-updates.sh >/var/log/lancache-dns-updates-cron.log 2>&1" >> /etc/crontabs/root
+    echo "Added cache-domains cron job: ${RANDOM_MINUTE} 4 * * *"
 fi
 
 echo "dnsproxy + cache-domains installation complete"
