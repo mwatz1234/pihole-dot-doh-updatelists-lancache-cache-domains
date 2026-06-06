@@ -1,0 +1,79 @@
+# Pi-hole + DoT/DoH + pihole-updatelists + Lancache DNS
+# CONFIG APPROACH: Config files (pihole-updatelists + lancache via mounted files)
+#
+# pihole-updatelists reads from ./pihole-updatelists/pihole-updatelists.conf
+# Lancache IP is set in ./cache-domains/config/config.json
+#
+# PRE-FLIGHT — create your config files before starting:
+#   mkdir -p ./pihole-updatelists ./cache-domains/config
+#
+#   # Edit this file with your list URLs:
+#   cp /path/to/pihole-updatelists.conf ./pihole-updatelists/pihole-updatelists.conf
+#
+#   # Edit this file with your Lancache server IP:
+#   echo '{"ips":{"generic":"192.168.1.10"},"cache_domains":{"default":"generic"}}' \
+#     > ./cache-domains/config/config.json
+#
+# IMPORTANT: If both env vars AND a mounted config file are present,
+#            env vars take precedence for pihole-updatelists.
+#            For lancache, LANCACHE_IP env var takes precedence over config.json.
+
+services:
+  pihole:
+    container_name: pihole
+    image: mwatz/pihole-dot-doh-updatelists-lancache-cache-domains:latest
+    hostname: pihole
+    domainname: pihole.local
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "853:853/tcp"
+      - "853:853/udp"
+    environment:
+      # ── Required ────────────────────────────────────────────────────────────────
+      - TZ=America/Los_Angeles
+      - FTLCONF_webserver_api_password=<your-password-here>
+      - FTLCONF_dns_upstreams=127.0.0.1#5054
+      - FTLCONF_dns_listeningMode=all
+
+      # ── Recommended ─────────────────────────────────────────────────────────────
+      - FTLCONF_LOCAL_IPV4=192.168.1.10
+
+      # ── Optional Pi-hole settings ────────────────────────────────────────────────
+      #- FTLCONF_dns_dnssec=true
+      #- FTLCONF_rev_server=true
+      #- FTLCONF_rev_server_target=192.168.1.1
+      #- FTLCONF_rev_server_domain=localdomain
+      #- FTLCONF_rev_server_cidr=192.168.1.0/24
+
+      # ── Lancache ─────────────────────────────────────────────────────────────────
+      # File-based approach: lancache IP set in ./cache-domains/config/config.json
+      # No LANCACHE_IP env var here — config.json file is authoritative
+      # If you add LANCACHE_IP here it will override the config.json on every restart
+
+      # ── Scheduling overrides ─────────────────────────────────────────────────────
+      #- CRONTAB_STRING=0 3 * * 0
+      #- LANCACHE_CRONTAB_STRING=17 4 * * *
+
+      # ── pihole-updatelists ───────────────────────────────────────────────────────
+      # No list env vars here — pihole-updatelists reads from the mounted config file instead
+      # File: ./pihole-updatelists/pihole-updatelists.conf
+      # Format: KEY="url1\nurl2\nurl3" (newline-separated within quotes)
+
+    volumes:
+      - './etc-pihole:/etc/pihole'                                  # Required
+      - './config:/config'                                          # Recommended (dnsproxy.yml)
+      - './etc-dnsmasq.d:/etc/dnsmasq.d'                          # Optional
+      - './cache-domains:/etc/cache-domains'                        # Required: config.json must persist
+      - './pihole-updatelists:/etc/pihole-updatelists/'             # Required: pihole-updatelists.conf
+
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+      - SYS_NICE
+      - NET_RAW
+      - CHOWN
+
+    restart: unless-stopped

@@ -1,0 +1,42 @@
+# Pi-hole + DoT/DoH + pihole-updatelists + Lancache DNS
+# CONFIG APPROACH: Minimal — bare essentials only
+#
+# Use this as a starting point. Add features incrementally.
+#
+# What works with this config:
+#   ✅ Pi-hole DNS blocking (empty blocklist until you add BLOCKLISTS_URL)
+#   ✅ DoT/DoH via Cloudflare Default (auto-initialized dnsproxy.yml)
+#   ✅ Lancache DNS (uses baked-in default IP 10.0.0.100 — update it!)
+#   ✅ Web UI at http://<host-ip>/admin
+#
+# What resets on restart without additional volumes:
+#   ⚠️  /config not mounted → dnsproxy resets to Cloudflare Default DoT/DoH (fine for most)
+#   ⚠️  /etc/cache-domains not mounted + no LANCACHE_IP → lancache IP resets to 10.0.0.100
+#
+# Upgrade path: add volumes and env vars from examples/docker-compose.env-vars.yml as needed
+
+services:
+  pihole:
+    container_name: pihole
+    image: mwatz/pihole-dot-doh-updatelists-lancache-cache-domains:latest
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"
+      - "443:443/tcp"
+    environment:
+      - TZ=America/Los_Angeles
+      - FTLCONF_webserver_api_password=<your-password-here>
+      - FTLCONF_dns_upstreams=127.0.0.1#5054
+      - FTLCONF_dns_listeningMode=all
+      # Set your Lancache IP (or mount /etc/cache-domains and edit config.json)
+      - LANCACHE_IP=192.168.1.10
+      # Optional: configure dnsproxy upstream via env var (Cloudflare Default active without this)
+      #- DNSPROXY_UPSTREAM=tls://1.1.1.1 tls://1.0.0.1 https://cloudflare-dns.com/dns-query
+    volumes:
+      # Only /etc/pihole is strictly required — all blocklists and FTL data live here
+      - './etc-pihole:/etc/pihole'
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+    restart: unless-stopped
