@@ -73,7 +73,7 @@ services:
       - NET_ADMIN
       - NET_BIND_SERVICE
       - SYS_NICE
-      - NET_RAW
+      #- NET_RAW          # Only needed for DHCP (uncomment if using Pi-hole as DHCP server)
       - CHOWN
 
     restart: unless-stopped

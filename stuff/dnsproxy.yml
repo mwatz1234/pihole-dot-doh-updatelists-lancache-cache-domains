@@ -36,7 +36,10 @@ upstream:
   #- tls://9.9.9.9
 
   ############################################################
-  # ===== Fallback DoH (DNS-over-HTTPS) =====
+  # ===== Additional: DNS-over-HTTPS (DoH) =====
+  # NOTE: all upstream entries are load-balanced equally by default (round-robin).
+  # To make DoH a true fallback only used when DoT fails, move https:// entries
+  # to a separate 'fallback:' key instead.
   ############################################################
 
   # Cloudflare Default DoH

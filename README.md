@@ -71,7 +71,7 @@ services:
       - NET_ADMIN        # Required: manage network interfaces, firewall rules, and DNS
       - NET_BIND_SERVICE # Required: bind to privileged ports (53, 80, 443)
       - SYS_NICE         # Optional: raise Pi-hole scheduling priority for better DNS latency
-      - NET_RAW          # Optional: needed for DHCP functionality (raw packet access)
+      #- NET_RAW         # Optional: raw packet sockets — only needed for DHCP (uncomment with 67:67/udp port)
       - CHOWN            # Optional: set file ownership on mapped volumes
     restart: unless-stopped
 ```
@@ -124,7 +124,7 @@ upstream:
   # Quad9 — third-party malware filtering with privacy focus
   #- tls://9.9.9.9
 
-  # ===== Fallback: DNS-over-HTTPS (DoH) =====
+  # ===== Additional: DNS-over-HTTPS (DoH) — load-balanced equally with DoT above =====
 
   # Cloudflare Default DoH — active by default
   - https://cloudflare-dns.com/dns-query
